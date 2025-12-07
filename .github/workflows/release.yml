@@ -65,7 +65,17 @@ jobs:
       - name: Build Installers
         run: |
           chmod +x scripts/build-installer.sh
-          ./scripts/build-installer.sh ${{ matrix.platform }}
+          ./scripts/build-installer.sh ${{ matrix.platform }} || {
+            echo "Build failed, listing .output directory:"
+            ls -la .output/ || echo "No .output directory found"
+            exit 1
+          }
+
+      - name: List build artifacts
+        if: always()
+        run: |
+          echo "Build artifacts in .output/:"
+          ls -lah .output/ || echo "No .output directory or it's empty"
 
       - name: Upload Installer Artifacts
         uses: actions/upload-artifact@v4

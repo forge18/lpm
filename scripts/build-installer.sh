@@ -31,18 +31,7 @@ build_macos() {
         }
     fi
     
-    # Determine target based on current arch
-    if [[ $(uname -m) == "arm64" ]]; then
-        TARGET="aarch64-apple-darwin"
-        ARCH="aarch64"
-    else
-        TARGET="x86_64-apple-darwin"
-        ARCH="x86_64"
-    fi
-    
-    # Build binary using zig
     # Set SDKROOT for macOS framework linking (required by cargo-zigbuild)
-    # This works on any macOS system with Xcode Command Line Tools installed
     if ! SDKROOT=$(xcrun --sdk macosx --show-sdk-path 2>/dev/null); then
         echo "⚠ Failed to find macOS SDK. Install Xcode Command Line Tools:"
         echo "   xcode-select --install"
@@ -50,38 +39,70 @@ build_macos() {
     fi
     export SDKROOT
     
-    # Pass framework search path to linker via RUSTFLAGS
-    # This tells zig where to find macOS frameworks in the SDK
-    # We append to existing RUSTFLAGS if any, to avoid overriding user settings
-    # Only set this for macOS builds, not for other platforms
+    # Build for both architectures
     local OLD_RUSTFLAGS="${RUSTFLAGS:-}"
-    export RUSTFLAGS="${OLD_RUSTFLAGS} -C link-arg=-F${SDKROOT}/System/Library/Frameworks"
+    for TARGET in aarch64-apple-darwin x86_64-apple-darwin; do
+        if [[ "$TARGET" == "aarch64-apple-darwin" ]]; then
+            ARCH="aarch64"
+        else
+            ARCH="x86_64"
+        fi
+        
+        echo "Building for $TARGET ($ARCH)..."
+        
+        # Pass framework search path to linker via RUSTFLAGS
+        export RUSTFLAGS="${OLD_RUSTFLAGS} -C link-arg=-F${SDKROOT}/System/Library/Frameworks"
+        
+        rustup target add "$TARGET" 2>/dev/null || true
+        
+        if ! cargo zigbuild --release --target "$TARGET"; then
+            echo "⚠ Failed to build macOS binary for $TARGET"
+            export RUSTFLAGS="${OLD_RUSTFLAGS}"
+            continue
+        fi
+        
+        export RUSTFLAGS="${OLD_RUSTFLAGS}"
+        
+        # Verify binary exists
+        if [ ! -f "target/$TARGET/release/lpm" ]; then
+            echo "⚠ Binary not found at target/$TARGET/release/lpm"
+            continue
+        fi
+        
+        # Create .pkg installer
+        if command -v pkgbuild &> /dev/null; then
+            mkdir -p installer-payload/usr/local/bin
+            cp "target/$TARGET/release/lpm" installer-payload/usr/local/bin/
+            
+            VERSION=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)
+            OUTPUT_FILE=".output/lpm-macos-${ARCH}.pkg"
+            
+            if pkgbuild --root installer-payload \
+                       --identifier com.lpm.installer \
+                       --version "$VERSION" \
+                       --install-location / \
+                       "$OUTPUT_FILE"; then
+                echo "✓ Created $OUTPUT_FILE"
+            else
+                echo "⚠ Failed to create .pkg for $ARCH"
+            fi
+            
+            rm -rf installer-payload
+        else
+            echo "⚠ pkgbuild not found. Install Xcode Command Line Tools: xcode-select --install"
+            # Fallback: create tar.gz instead
+            mkdir -p lpm-release
+            cp "target/$TARGET/release/lpm" lpm-release/
+            tar czf ".output/lpm-macos-${ARCH}.tar.gz" -C lpm-release lpm
+            rm -rf lpm-release
+            echo "✓ Created .output/lpm-macos-${ARCH}.tar.gz (fallback)"
+        fi
+    done
     
-    rustup target add "$TARGET" 2>/dev/null || true
-    cargo zigbuild --release --target "$TARGET" || {
-        echo "⚠ Failed to build macOS binary"
-        export RUSTFLAGS="${OLD_RUSTFLAGS}"  # Restore original RUSTFLAGS
+    # Verify at least one file was created
+    if [ -z "$(ls -A .output/lpm-macos-* 2>/dev/null)" ]; then
+        echo "⚠ No macOS installers were created"
         return 1
-    }
-    
-    # Restore original RUSTFLAGS after macOS build
-    export RUSTFLAGS="${OLD_RUSTFLAGS}"
-    
-    # Create .pkg installer
-    if command -v pkgbuild &> /dev/null; then
-        mkdir -p installer-payload/usr/local/bin
-        cp "target/$TARGET/release/lpm" installer-payload/usr/local/bin/
-        
-        pkgbuild --root installer-payload \
-                 --identifier com.lpm.installer \
-                 --version "$(grep '^version' Cargo.toml | cut -d'"' -f2)" \
-                 --install-location / \
-                 .output/lpm-macos-${ARCH}.pkg
-        
-        rm -rf installer-payload
-        echo "✓ Created .output/lpm-macos-${ARCH}.pkg"
-    else
-        echo "⚠ pkgbuild not found. Install Xcode Command Line Tools: xcode-select --install"
     fi
 }
 
