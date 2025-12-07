@@ -1,0 +1,177 @@
+use lpm::cache::Cache;
+use lpm::config::Config;
+use lpm::core::{LpmError, LpmResult};
+use lpm::core::path::find_project_root;
+use lpm::luarocks::client::LuaRocksClient;
+use lpm::luarocks::manifest::Manifest;
+use lpm::package::lockfile::Lockfile;
+use lpm::package::manifest::PackageManifest;
+use lpm::core::version::parse_constraint;
+use lpm::luarocks::version::normalize_luarocks_version;
+use lpm::core::version::Version;
+use std::env;
+
+pub async fn run() -> LpmResult<()> {
+    let current_dir = env::current_dir()
+        .map_err(|e| LpmError::Path(format!("Failed to get current directory: {}", e)))?;
+
+    let project_root = find_project_root(&current_dir)?;
+
+    // Load manifest and lockfile
+    let manifest = PackageManifest::load(&project_root)?;
+    let lockfile = Lockfile::load(&project_root)?;
+
+    if manifest.dependencies.is_empty() && manifest.dev_dependencies.is_empty() {
+        println!("No dependencies to check");
+        return Ok(());
+    }
+
+    println!("Checking for outdated packages...");
+
+    // Load config and create cache
+    let config = Config::load()?;
+    let cache = Cache::new(config.get_cache_dir()?)?;
+
+    // Create LuaRocks client
+    let client = LuaRocksClient::new(&config, cache);
+    let luarocks_manifest = client.fetch_manifest().await.ok();
+
+    let mut outdated_count = 0;
+    let mut up_to_date_count = 0;
+
+    // Check regular dependencies
+    for (name, version_constraint) in &manifest.dependencies {
+        let current_version = lockfile
+            .as_ref()
+            .and_then(|lf| lf.get_package(name))
+            .and_then(|pkg| Version::parse(&pkg.version).ok());
+
+        match check_outdated(&client, &luarocks_manifest, name, version_constraint, current_version.as_ref()).await {
+            Ok(OutdatedStatus::UpToDate) => {
+                up_to_date_count += 1;
+            }
+            Ok(OutdatedStatus::Outdated { current, latest }) => {
+                outdated_count += 1;
+                if let Some(current) = current {
+                    println!("  ⚠️  {}: {} → {} (constraint: {})", name, current, latest, version_constraint);
+                } else {
+                    println!("  ⚠️  {}: (not installed) → {} (constraint: {})", name, latest, version_constraint);
+                }
+            }
+            Ok(OutdatedStatus::NotFound) => {
+                println!("  ❓ {}: Package not found on LuaRocks", name);
+            }
+            Err(e) => {
+                println!("  ❌ {}: Error checking version: {}", name, e);
+            }
+        }
+    }
+
+    // Check dev dependencies
+    for (name, version_constraint) in &manifest.dev_dependencies {
+        let current_version = lockfile
+            .as_ref()
+            .and_then(|lf| lf.get_package(name))
+            .and_then(|pkg| Version::parse(&pkg.version).ok());
+
+        match check_outdated(&client, &luarocks_manifest, name, version_constraint, current_version.as_ref()).await {
+            Ok(OutdatedStatus::UpToDate) => {
+                up_to_date_count += 1;
+            }
+            Ok(OutdatedStatus::Outdated { current, latest }) => {
+                outdated_count += 1;
+                if let Some(current) = current {
+                    println!("  ⚠️  {}: {} → {} (constraint: {}, dev)", name, current, latest, version_constraint);
+                } else {
+                    println!("  ⚠️  {}: (not installed) → {} (constraint: {}, dev)", name, latest, version_constraint);
+                }
+            }
+            Ok(OutdatedStatus::NotFound) => {
+                println!("  ❓ {}: Package not found on LuaRocks (dev)", name);
+            }
+            Err(e) => {
+                println!("  ❌ {}: Error checking version: {}", name, e);
+            }
+        }
+    }
+
+    println!("\nSummary:");
+    println!("  Up to date: {}", up_to_date_count);
+    println!("  Outdated: {}", outdated_count);
+
+    if outdated_count > 0 {
+        println!("\nRun 'lpm update' to update outdated packages");
+    }
+
+    Ok(())
+}
+
+enum OutdatedStatus {
+    UpToDate,
+    Outdated { current: Option<Version>, latest: Version },
+    NotFound,
+}
+
+async fn check_outdated(
+    client: &LuaRocksClient,
+    manifest: &Option<Manifest>,
+    package_name: &str,
+    version_constraint: &str,
+    current_version: Option<&Version>,
+) -> LpmResult<OutdatedStatus> {
+    // Get available versions from manifest
+    let available_versions = if let Some(manifest) = manifest {
+        manifest.get_package_version_strings(package_name)
+    } else {
+        // Try to fetch manifest if not available
+        match client.fetch_manifest().await {
+            Ok(m) => m.get_package_version_strings(package_name),
+            Err(_) => return Ok(OutdatedStatus::NotFound),
+        }
+    };
+
+    if available_versions.is_empty() {
+        return Ok(OutdatedStatus::NotFound);
+    }
+
+    // Parse and normalize versions
+    let mut versions: Vec<Version> = available_versions
+        .iter()
+        .filter_map(|v| normalize_luarocks_version(v).ok())
+        .collect();
+
+    versions.sort_by(|a, b| b.cmp(a)); // Highest first
+
+    if versions.is_empty() {
+        return Ok(OutdatedStatus::NotFound);
+    }
+
+    let latest = versions[0].clone();
+
+    // Parse constraint
+    let constraint = parse_constraint(version_constraint)?;
+
+    // Check if latest satisfies constraint
+    if !latest.satisfies(&constraint) {
+        // Latest doesn't satisfy constraint, so we're up to date with constraint
+        return Ok(OutdatedStatus::UpToDate);
+    }
+
+    // Check if current version is outdated
+    if let Some(current) = current_version {
+        if current < &latest {
+            Ok(OutdatedStatus::Outdated {
+                current: Some(current.clone()),
+                latest,
+            })
+        } else {
+            Ok(OutdatedStatus::UpToDate)
+        }
+    } else {
+        // Not installed, but latest is available
+        Ok(OutdatedStatus::Outdated {
+            current: None,
+            latest,
+        })
+    }
+}

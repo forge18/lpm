@@ -1,0 +1,174 @@
+use crate::core::{LpmError, LpmResult};
+use std::fs;
+use std::path::Path;
+use std::process::Command;
+
+pub struct WrapperGenerator {
+    bin_dir: std::path::PathBuf,
+}
+
+impl WrapperGenerator {
+    pub fn new(lpm_home: &Path) -> Self {
+        Self {
+            bin_dir: lpm_home.join("bin"),
+        }
+    }
+
+    /// Generate binary wrappers for lua and luac
+    pub fn generate(&self) -> LpmResult<()> {
+        fs::create_dir_all(&self.bin_dir)?;
+
+        self.compile_wrapper("lua")?;
+        self.compile_wrapper("luac")?;
+
+        println!("✓ Generated wrappers in {}", self.bin_dir.display());
+        self.print_setup_instructions();
+
+        Ok(())
+    }
+
+    /// Compile a wrapper binary
+    ///
+    /// The wrapper is a small Rust program that:
+    /// 1. Checks for .lua-version file in current/parent directories
+    /// 2. Falls back to current version
+    /// 3. Executes the correct binary
+    fn compile_wrapper(&self, binary: &str) -> LpmResult<()> {
+        let wrapper_source = self.wrapper_source_code(binary);
+        let source_path = self.bin_dir.join(format!("{}_wrapper.rs", binary));
+        fs::write(&source_path, wrapper_source)?;
+
+        let output_name = if cfg!(target_os = "windows") {
+            format!("{}.exe", binary)
+        } else {
+            binary.to_string()
+        };
+
+        // Compile using rustc (or cargo if available)
+        let status = Command::new("rustc")
+            .arg(&source_path)
+            .arg("-o")
+            .arg(self.bin_dir.join(&output_name))
+            .status()?;
+
+        if !status.success() {
+            return Err(LpmError::Package(format!(
+                "Failed to compile {} wrapper. Make sure rustc is available.",
+                binary
+            )));
+        }
+
+        // Clean up source file
+        fs::remove_file(&source_path)?;
+
+        Ok(())
+    }
+
+    fn wrapper_source_code(&self, binary: &str) -> String {
+        format!(
+            r#"fn main() {{
+    use std::env;
+    use std::path::PathBuf;
+    use std::process::Command;
+    
+    let lpm_home = env::var("LPM_LUA_DIR")
+        .unwrap_or_else(|_| {{
+            #[cfg(unix)]
+            {{
+                let home = env::var("HOME").expect("HOME environment variable not set");
+                format!("{{}}/.lpm", home)
+            }}
+            #[cfg(windows)]
+            {{
+                let home = env::var("APPDATA").expect("APPDATA environment variable not set");
+                format!("{{}}\\\\lpm", home)
+            }}
+        }});
+    
+    // Check for .lua-version file
+    let mut dir = env::current_dir().unwrap();
+    let mut version = None;
+    
+    loop {{
+        let version_file = dir.join(".lua-version");
+        if version_file.exists() {{
+            if let Ok(content) = std::fs::read_to_string(&version_file) {{
+                version = Some(content.trim().to_string());
+                break;
+            }}
+        }}
+        
+        if let Some(parent) = dir.parent() {{
+            dir = parent.to_path_buf();
+        }} else {{
+            break;
+        }}
+    }}
+    
+    // Determine which binary to use
+    let bin_path = if let Some(ver) = version {{
+        let version_dir = PathBuf::from(&lpm_home).join("versions").join(&ver);
+        version_dir.join("bin").join("{}")
+    }} else {{
+        // Use current version (read from current file)
+        let current_file = PathBuf::from(&lpm_home).join("current");
+        if current_file.exists() {{
+            if let Ok(version) = std::fs::read_to_string(&current_file) {{
+                let version = version.trim();
+                if !version.is_empty() {{
+                    PathBuf::from(&lpm_home).join("versions").join(version).join("bin").join("{}")
+                }} else {{
+                    eprintln!("Error: No Lua version is currently selected");
+                    eprintln!("Run: lpm lua use <version>");
+                    std::process::exit(1);
+                }}
+            }} else {{
+                eprintln!("Error: Failed to read current version file");
+                std::process::exit(1);
+            }}
+        }} else {{
+            eprintln!("Error: No Lua version is currently selected");
+            eprintln!("Run: lpm lua use <version>");
+            std::process::exit(1);
+        }}
+    }};
+    
+    if !bin_path.exists() {{
+        eprintln!("Error: Lua binary not found at {{}}", bin_path.display());
+        std::process::exit(1);
+    }}
+    
+    // Execute the binary with all arguments
+    let args: Vec<String> = env::args().skip(1).collect();
+    let status = Command::new(&bin_path)
+        .args(&args)
+        .status()
+        .expect("Failed to execute Lua binary");
+    
+    std::process::exit(status.code().unwrap_or(1));
+}}
+"#,
+            binary, binary
+        )
+    }
+
+    fn print_setup_instructions(&self) {
+        println!();
+        println!("To use LPM-managed Lua versions, add this to your PATH:");
+        println!("  {}", self.bin_dir.display());
+        println!();
+
+        #[cfg(windows)]
+        {
+            println!("On Windows, you can add it permanently with:");
+            println!("  setx PATH \"%PATH%;{}\"", self.bin_dir.display());
+        }
+
+        #[cfg(unix)]
+        {
+            println!("On Unix/macOS, add to your shell profile:");
+            println!("  export PATH=\"{}$PATH\"", self.bin_dir.display());
+        }
+    }
+}
+

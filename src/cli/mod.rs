@@ -1,0 +1,20 @@
+pub mod init;
+pub mod install;
+pub mod remove;
+pub mod update;
+pub mod list;
+pub mod verify;
+pub mod outdated;
+pub mod clean;
+pub mod run;
+pub mod exec;
+pub mod build;
+pub mod package;
+pub mod audit;
+pub mod publish;
+pub mod login;
+pub mod generate_rockspec;
+pub mod lua;
+pub mod plugin;
+pub mod template;
+

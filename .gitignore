@@ -1,0 +1,26 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# LPM specific
+lua_modules/
+package.lock
+*.lock
+.output/
+
+# Test artifacts
+*.tmp
+test_output/
+

@@ -1,0 +1,231 @@
+#!/bin/bash
+set -euo pipefail
+
+# Build installer executables for LPM
+# Usage: ./scripts/build-installer.sh [platform]
+# Platforms: macos, windows, linux, all
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
+
+# Create output directory
+mkdir -p .output
+
+PLATFORM="${1:-all}"
+
+build_macos() {
+    echo "Building macOS installer..."
+    
+    # Check for zig and cargo-zigbuild
+    if ! command -v zig &> /dev/null; then
+        echo "⚠ zig is required. Install: brew install zig"
+        return 1
+    fi
+    
+    if ! command -v cargo-zigbuild &> /dev/null; then
+        echo "Installing cargo-zigbuild..."
+        cargo install cargo-zigbuild 2>/dev/null || {
+            echo "⚠ Failed to install cargo-zigbuild"
+            return 1
+        }
+    fi
+    
+    # Determine target based on current arch
+    if [[ $(uname -m) == "arm64" ]]; then
+        TARGET="aarch64-apple-darwin"
+        ARCH="aarch64"
+    else
+        TARGET="x86_64-apple-darwin"
+        ARCH="x86_64"
+    fi
+    
+    # Build binary using zig
+    # Set SDKROOT for macOS framework linking (required by cargo-zigbuild)
+    # This works on any macOS system with Xcode Command Line Tools installed
+    if ! SDKROOT=$(xcrun --sdk macosx --show-sdk-path 2>/dev/null); then
+        echo "⚠ Failed to find macOS SDK. Install Xcode Command Line Tools:"
+        echo "   xcode-select --install"
+        return 1
+    fi
+    export SDKROOT
+    
+    # Pass framework search path to linker via RUSTFLAGS
+    # This tells zig where to find macOS frameworks in the SDK
+    # We append to existing RUSTFLAGS if any, to avoid overriding user settings
+    # Only set this for macOS builds, not for other platforms
+    local OLD_RUSTFLAGS="${RUSTFLAGS:-}"
+    export RUSTFLAGS="${OLD_RUSTFLAGS} -C link-arg=-F${SDKROOT}/System/Library/Frameworks"
+    
+    rustup target add "$TARGET" 2>/dev/null || true
+    cargo zigbuild --release --target "$TARGET" || {
+        echo "⚠ Failed to build macOS binary"
+        export RUSTFLAGS="${OLD_RUSTFLAGS}"  # Restore original RUSTFLAGS
+        return 1
+    }
+    
+    # Restore original RUSTFLAGS after macOS build
+    export RUSTFLAGS="${OLD_RUSTFLAGS}"
+    
+    # Create .pkg installer
+    if command -v pkgbuild &> /dev/null; then
+        mkdir -p installer-payload/usr/local/bin
+        cp "target/$TARGET/release/lpm" installer-payload/usr/local/bin/
+        
+        pkgbuild --root installer-payload \
+                 --identifier com.lpm.installer \
+                 --version "$(grep '^version' Cargo.toml | cut -d'"' -f2)" \
+                 --install-location / \
+                 .output/lpm-macos-${ARCH}.pkg
+        
+        rm -rf installer-payload
+        echo "✓ Created .output/lpm-macos-${ARCH}.pkg"
+    else
+        echo "⚠ pkgbuild not found. Install Xcode Command Line Tools: xcode-select --install"
+    fi
+}
+
+build_windows() {
+    echo "Building Windows installer..."
+    
+    # Check for clang (required by cargo-xwin)
+    if ! command -v clang &> /dev/null; then
+        echo "⚠ clang is required. Install: brew install llvm"
+        return 1
+    fi
+    
+    # Check for cargo-xwin
+    if ! command -v cargo-xwin &> /dev/null; then
+        echo "Installing cargo-xwin..."
+        cargo install cargo-xwin 2>/dev/null || {
+            echo "⚠ Failed to install cargo-xwin"
+            return 1
+        }
+    fi
+    
+    # Install Windows target if needed
+    rustup target add x86_64-pc-windows-msvc 2>/dev/null || true
+    
+    # Install llvm-tools component (required for assembly dependencies)
+    rustup component add llvm-tools 2>/dev/null || true
+    
+    # Clear any macOS-specific RUSTFLAGS that might have been set
+    local OLD_RUSTFLAGS="${RUSTFLAGS:-}"
+    unset RUSTFLAGS
+    
+    # Build Windows binary using cargo-xwin
+    if ! cargo xwin build --release --target x86_64-pc-windows-msvc; then
+        export RUSTFLAGS="${OLD_RUSTFLAGS}"  # Restore if it existed
+        echo "⚠ Failed to build Windows binary"
+        return 1
+    fi
+    
+    export RUSTFLAGS="${OLD_RUSTFLAGS}"  # Restore if it existed
+    
+    if [ -f "target/x86_64-pc-windows-msvc/release/lpm.exe" ]; then
+        # Create zip with executable and install script
+        mkdir -p lpm-windows-release
+        cp target/x86_64-pc-windows-msvc/release/lpm.exe lpm-windows-release/
+        
+        # Create install.bat script
+        cat > lpm-windows-release/install.bat << 'EOF'
+@echo off
+echo Installing LPM...
+set INSTALL_DIR=%USERPROFILE%\.cargo\bin
+if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
+copy /Y lpm.exe "%INSTALL_DIR%\lpm.exe"
+echo.
+echo LPM installed to %INSTALL_DIR%
+echo.
+echo Add to PATH (run in PowerShell as Administrator):
+echo [Environment]::SetEnvironmentVariable("Path", $env:Path + ";%USERPROFILE%\.cargo\bin", "User")
+echo.
+echo Or manually add %USERPROFILE%\.cargo\bin to your PATH in System Properties
+pause
+EOF
+        
+        # Create zip file
+        cd lpm-windows-release
+        zip -q ../.output/lpm-windows-x86_64.zip lpm.exe install.bat
+        cd ..
+        rm -rf lpm-windows-release
+        
+        echo "✓ Created .output/lpm-windows-x86_64.zip"
+    else
+        echo "⚠ Failed to build Windows binary. Install Windows target with:"
+        echo "   rustup target add x86_64-pc-windows-msvc"
+        echo "   rustup toolchain install stable-x86_64-pc-windows-msvc"
+    fi
+}
+
+build_linux() {
+    echo "Building Linux installer..."
+    
+    # Check for zig and cargo-zigbuild
+    if ! command -v zig &> /dev/null; then
+        echo "⚠ zig is required. Install: brew install zig"
+        return 1
+    fi
+    
+    if ! command -v cargo-zigbuild &> /dev/null; then
+        echo "Installing cargo-zigbuild..."
+        cargo install cargo-zigbuild 2>/dev/null || {
+            echo "⚠ Failed to install cargo-zigbuild"
+            return 1
+        }
+    fi
+    
+    # Build for both x86_64 and aarch64 Linux using zig
+    # Note: Cross-compiling to Linux from macOS requires OpenSSL handling
+    # zigbuild should handle this, but if it fails, it's likely an OpenSSL issue
+    for TARGET in x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu; do
+        echo "Building for $TARGET..."
+        rustup target add "$TARGET" 2>/dev/null || true
+        
+        # Clear any macOS-specific RUSTFLAGS that might have been set
+        local OLD_RUSTFLAGS="${RUSTFLAGS:-}"
+        unset RUSTFLAGS
+        
+        if ! cargo zigbuild --release --target "$TARGET"; then
+            export RUSTFLAGS="${OLD_RUSTFLAGS}"  # Restore if it existed
+            echo "⚠ Failed to build for $TARGET"
+            continue
+        fi
+        
+        export RUSTFLAGS="${OLD_RUSTFLAGS}"  # Restore if it existed
+        
+        # Create archive
+        mkdir -p lpm-release
+        cp "target/$TARGET/release/lpm" lpm-release/
+        ARCH_NAME=$(echo "$TARGET" | sed 's/unknown-linux-gnu//' | sed 's/-//')
+        tar czf ".output/lpm-linux-${ARCH_NAME}.tar.gz" -C lpm-release lpm
+        rm -rf lpm-release
+        echo "✓ Created .output/lpm-linux-${ARCH_NAME}.tar.gz"
+    done
+}
+
+case "$PLATFORM" in
+    macos)
+        build_macos
+        ;;
+    windows)
+        build_windows
+        ;;
+    linux)
+        build_linux
+        ;;
+    all)
+        echo "Building installers for all platforms..."
+        build_macos || echo "⚠ macOS build failed"
+        build_linux || echo "⚠ Linux build failed"
+        build_windows || echo "⚠ Windows build failed"
+        echo ""
+        echo "Build process completed. Check .output/ for generated installers."
+        ;;
+    *)
+        echo "Unknown platform: $PLATFORM"
+        echo "Usage: $0 [macos|windows|linux|all]"
+        exit 1
+        ;;
+esac
+

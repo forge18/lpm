@@ -1,0 +1,152 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Installers for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-latest
+            platform: macos
+          - os: windows-latest
+            platform: windows
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Zig (macOS/Linux)
+        if: matrix.os != 'windows-latest'
+        run: |
+          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            brew install zig
+          else
+            # Install zig for Linux
+            wget -q https://ziglang.org/download/0.12.0/zig-linux-x86_64-0.12.0.tar.xz
+            tar -xf zig-linux-x86_64-0.12.0.tar.xz
+            sudo mv zig-linux-x86_64-0.12.0 /opt/zig
+            sudo ln -s /opt/zig/zig /usr/local/bin/zig
+          fi
+
+      - name: Install cargo-zigbuild (macOS/Linux)
+        if: matrix.os != 'windows-latest'
+        run: cargo install cargo-zigbuild
+
+      - name: Install LLVM/clang (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          choco install llvm -y
+          echo "$env:ChocolateyInstall\lib\llvm\tools\bin" >> $env:GITHUB_PATH
+
+      - name: Install cargo-xwin (Windows)
+        if: matrix.os == 'windows-latest'
+        run: cargo install cargo-xwin
+
+      - name: Install llvm-tools (Windows)
+        if: matrix.os == 'windows-latest'
+        run: rustup component add llvm-tools
+
+      - name: Build Installers
+        run: |
+          chmod +x scripts/build-installer.sh
+          ./scripts/build-installer.sh ${{ matrix.platform }}
+
+      - name: Upload Installer Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.platform }}
+          path: .output/*
+          if-no-files-found: error
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all installer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: installers-*
+          merge-multiple: true
+
+      - name: List installer files
+        run: |
+          echo "Installer files to be uploaded:"
+          find artifacts -type f -name "lpm-*" | sort
+
+      - name: Extract version from tag
+        id: tag_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Tag version: $VERSION"
+
+      - name: Extract changelog for version
+        id: changelog
+        run: |
+          # Extract changelog section for this version
+          VERSION="${{ steps.tag_version.outputs.version }}"
+          
+          # Use Python to extract the changelog section reliably
+          python3 << 'EOF'
+          import re
+          import sys
+          
+          version = "${{ steps.tag_version.outputs.version }}"
+          
+          try:
+              with open('CHANGELOG.md', 'r') as f:
+                  content = f.read()
+              
+              # Find the section for this version
+              pattern = rf'^## \[{re.escape(version)}\].*?(?=^## \[|\Z)'
+              match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
+              
+              if match:
+                  notes = match.group(0).strip()
+                  with open('release_notes.md', 'w') as f:
+                      f.write(notes)
+                  print(f"✓ Extracted changelog for v{version}")
+                  sys.exit(0)
+              else:
+                  # Fallback: create default release note
+                  repo = "${{ github.repository }}"
+                  with open('release_notes.md', 'w') as f:
+                      f.write(f"## Release v{version}\n\n")
+                      f.write(f"See [CHANGELOG.md](https://github.com/{repo}/blob/main/CHANGELOG.md) for details.\n")
+                  print(f"⚠ No changelog entry found for v{version}, using default")
+                  sys.exit(0)
+          except Exception as e:
+              print(f"Error: {e}")
+              sys.exit(1)
+          EOF
+          
+          echo ""
+          echo "Release notes:"
+          cat release_notes.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/lpm-*
+          body_path: release_notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

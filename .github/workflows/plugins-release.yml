@@ -1,0 +1,266 @@
+name: Plugin Release
+
+on:
+  push:
+    tags:
+      - 'plugins/v*'
+      - 'lpm-watch/v*'
+      - 'lpm-bundle/v*'
+  workflow_dispatch:
+    inputs:
+      plugin:
+        description: 'Plugin to release (watch, bundle, or all)'
+        required: true
+        type: choice
+        options:
+          - watch
+          - bundle
+          - all
+      version:
+        description: 'Version tag (e.g., v0.1.0)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Build ${{ matrix.plugin }} for ${{ matrix.platform }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            target: x86_64-unknown-linux-gnu
+            arch: x86_64
+            binary_ext: ""
+            plugin: watch
+          - os: ubuntu-latest
+            platform: linux
+            target: aarch64-unknown-linux-gnu
+            arch: aarch64
+            binary_ext: ""
+            plugin: watch
+          - os: macos-latest
+            platform: macos
+            target: x86_64-apple-darwin
+            arch: x86_64
+            binary_ext: ""
+            plugin: watch
+          - os: macos-latest
+            platform: macos
+            target: aarch64-apple-darwin
+            arch: aarch64
+            binary_ext: ""
+            plugin: watch
+          - os: windows-latest
+            platform: windows
+            target: x86_64-pc-windows-msvc
+            arch: x86_64
+            binary_ext: ".exe"
+            plugin: watch
+          - os: ubuntu-latest
+            platform: linux
+            target: x86_64-unknown-linux-gnu
+            arch: x86_64
+            binary_ext: ""
+            plugin: bundle
+          - os: ubuntu-latest
+            platform: linux
+            target: aarch64-unknown-linux-gnu
+            arch: aarch64
+            binary_ext: ""
+            plugin: bundle
+          - os: macos-latest
+            platform: macos
+            target: x86_64-apple-darwin
+            arch: x86_64
+            binary_ext: ""
+            plugin: bundle
+          - os: macos-latest
+            platform: macos
+            target: aarch64-apple-darwin
+            arch: aarch64
+            binary_ext: ""
+            plugin: bundle
+          - os: windows-latest
+            platform: windows
+            target: x86_64-pc-windows-msvc
+            arch: x86_64
+            binary_ext: ".exe"
+            plugin: bundle
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Zig (macOS/Linux)
+        if: matrix.os != 'windows-latest'
+        run: |
+          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            brew install zig
+          else
+            wget -q https://ziglang.org/download/0.12.0/zig-linux-x86_64-0.12.0.tar.xz
+            tar -xf zig-linux-x86_64-0.12.0.tar.xz
+            sudo mv zig-linux-x86_64-0.12.0 /opt/zig
+            sudo ln -s /opt/zig/zig /usr/local/bin/zig
+          fi
+
+      - name: Install cargo-zigbuild (macOS/Linux)
+        if: matrix.os != 'windows-latest'
+        run: cargo install cargo-zigbuild
+
+      - name: Install LLVM/clang (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          choco install llvm -y
+          echo "$env:ChocolateyInstall\lib\llvm\tools\bin" >> $env:GITHUB_PATH
+
+      - name: Install cargo-xwin (Windows)
+        if: matrix.os == 'windows-latest'
+        run: cargo install cargo-xwin
+
+      - name: Install llvm-tools (Windows)
+        if: matrix.os == 'windows-latest'
+        run: rustup component add llvm-tools
+
+      - name: Add target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Build plugin binary
+        run: |
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            cargo xwin build --release --target ${{ matrix.target }} -p lpm-${{ matrix.plugin }}
+          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
+            export SDKROOT
+            export RUSTFLAGS="-C link-arg=-F${SDKROOT}/System/Library/Frameworks"
+            cargo zigbuild --release --target ${{ matrix.target }} -p lpm-${{ matrix.plugin }}
+          else
+            cargo zigbuild --release --target ${{ matrix.target }} -p lpm-${{ matrix.plugin }}
+          fi
+
+      - name: Prepare binary
+        run: |
+          mkdir -p .output
+          BINARY_NAME="lpm-${{ matrix.plugin }}${{ matrix.binary_ext }}"
+          SOURCE_PATH="target/${{ matrix.target }}/release/$BINARY_NAME"
+          
+          if [[ "${{ matrix.platform }}" == "windows" ]]; then
+            # For Windows, create a zip file
+            mkdir -p plugin-release
+            cp "$SOURCE_PATH" plugin-release/
+            cd plugin-release
+            zip -q ../.output/lpm-${{ matrix.plugin }}-${{ matrix.platform }}-${{ matrix.arch }}.zip "$BINARY_NAME"
+            cd ..
+            rm -rf plugin-release
+          else
+            # For Unix, create a tar.gz
+            mkdir -p plugin-release
+            cp "$SOURCE_PATH" plugin-release/
+            tar czf .output/lpm-${{ matrix.plugin }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz -C plugin-release "$BINARY_NAME"
+            rm -rf plugin-release
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.plugin }}-${{ matrix.platform }}-${{ matrix.arch }}
+          path: .output/lpm-${{ matrix.plugin }}-${{ matrix.platform }}-${{ matrix.arch }}.*
+          if-no-files-found: error
+
+  release:
+    name: Create Plugin Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Determine plugin and version from tag
+        id: tag_info
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            if [[ "$TAG" == plugins/v* ]]; then
+              PLUGIN="all"
+              VERSION="${TAG#plugins/v}"
+            elif [[ "$TAG" == lpm-watch/v* ]]; then
+              PLUGIN="watch"
+              VERSION="${TAG#lpm-watch/v}"
+            elif [[ "$TAG" == lpm-bundle/v* ]]; then
+              PLUGIN="bundle"
+              VERSION="${TAG#lpm-bundle/v}"
+            else
+              echo "Unknown tag format: $TAG"
+              exit 1
+            fi
+          else
+            PLUGIN="${{ github.event.inputs.plugin }}"
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          
+          echo "plugin=$PLUGIN" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Plugin: $PLUGIN, Version: $VERSION"
+
+      - name: Create release for watch plugin
+        if: steps.tag_info.outputs.plugin == 'watch' || steps.tag_info.outputs.plugin == 'all'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: lpm-watch/v${{ steps.tag_info.outputs.version }}
+          name: lpm-watch v${{ steps.tag_info.outputs.version }}
+          body: |
+            ## lpm-watch v${{ steps.tag_info.outputs.version }}
+            
+            Plugin release for lpm-watch.
+            
+            ### Installation
+            
+            ```bash
+            lpm install -g lpm-watch
+            ```
+            
+            ### Binaries
+            
+            Pre-built binaries for all platforms are attached to this release.
+          files: artifacts/watch-*/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create release for bundle plugin
+        if: steps.tag_info.outputs.plugin == 'bundle' || steps.tag_info.outputs.plugin == 'all'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: lpm-bundle/v${{ steps.tag_info.outputs.version }}
+          name: lpm-bundle v${{ steps.tag_info.outputs.version }}
+          body: |
+            ## lpm-bundle v${{ steps.tag_info.outputs.version }}
+            
+            Plugin release for lpm-bundle.
+            
+            ### Installation
+            
+            ```bash
+            lpm install -g lpm-bundle
+            ```
+            
+            ### Binaries
+            
+            Pre-built binaries for all platforms are attached to this release.
+          files: artifacts/bundle-*/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

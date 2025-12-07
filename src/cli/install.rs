@@ -1,0 +1,833 @@
+use lpm::cache::Cache;
+use lpm::config::Config;
+use lpm::core::{LpmError, LpmResult};
+use lpm::core::path::{find_project_root, global_dir, global_lua_modules_dir, global_bin_dir, ensure_dir};
+use lpm::luarocks::client::LuaRocksClient;
+use lpm::lua_version::compatibility::PackageCompatibility;
+use lpm::lua_version::detector::LuaVersionDetector;
+use lpm::package::conflict_checker::ConflictChecker;
+use lpm::package::installer::PackageInstaller;
+use lpm::package::lockfile::Lockfile;
+use lpm::package::lockfile_builder::LockfileBuilder;
+use lpm::package::manifest::PackageManifest;
+use lpm::package::rollback::with_rollback_async;
+use lpm::path_setup::loader::PathSetup;
+use lpm::resolver::DependencyResolver;
+use lpm::workspace::Workspace;
+use lpm::core::version::parse_constraint;
+use std::collections::HashMap;
+use std::env;
+use std::path::Path;
+use std::fs;
+use dialoguer::{Input, MultiSelect, Confirm, Select};
+use fuzzy_matcher::FuzzyMatcher;
+use fuzzy_matcher::skim::SkimMatcherV2;
+
+pub async fn run(package: Option<String>, dev: bool, path: Option<String>, no_dev: bool, dev_only: bool, global: bool, interactive: bool) -> LpmResult<()> {
+    // Handle global installation (install to system-wide location).
+    if global {
+        if package.is_none() {
+            return Err(LpmError::Package(
+                "Global installation requires a package name. Use: lpm install -g <package>".to_string(),
+            ));
+        }
+        if path.is_some() {
+            return Err(LpmError::Package(
+                "Cannot install from local path globally. Use: lpm install --path <path>".to_string(),
+            ));
+        }
+        return install_global(package.unwrap()).await;
+    }
+
+    let current_dir = env::current_dir()
+        .map_err(|e| LpmError::Path(format!("Failed to get current directory: {}", e)))?;
+
+    let project_root = find_project_root(&current_dir)?;
+    
+    // Use rollback wrapper for safety
+    with_rollback_async(&project_root, || async {
+        // Check if we're in a workspace
+        let workspace = if Workspace::is_workspace(&project_root) {
+            Some(Workspace::load(&project_root)?)
+        } else {
+            None
+        };
+
+        // For workspace, install to workspace root's lua_modules
+        // For single package, use project root
+        let install_root = &project_root;
+
+        let mut manifest = PackageManifest::load(install_root)?;
+        
+        // Detect and validate Lua version
+        let installed_lua = LuaVersionDetector::detect()?;
+        println!("Detected Lua version: {}", installed_lua.version_string());
+        
+        // Validate project's lua_version constraint
+        PackageCompatibility::validate_project_constraint(&installed_lua, &manifest.lua_version)?;
+        
+        // Check for conflicts before installation
+        ConflictChecker::check_conflicts(&manifest)?;
+
+        // Handle interactive mode
+        if interactive {
+            return run_interactive(&project_root, dev, &mut manifest).await;
+        }
+
+        match (package, path) {
+            // Install from local path
+            (None, Some(local_path)) => {
+                install_from_path(&local_path, dev, &mut manifest)?;
+            }
+            // Install specific package
+            (Some(pkg_spec), None) => {
+                install_package(&project_root, &pkg_spec, dev, &mut manifest).await?;
+            }
+            // Install all dependencies
+            (None, None) => {
+                if let Some(ref ws) = workspace {
+                    // Install workspace dependencies (shared + all packages)
+                    install_workspace_dependencies(install_root, ws, no_dev, dev_only).await?;
+                } else {
+                    // Install single package dependencies
+                    install_all_dependencies(install_root, &manifest, no_dev, dev_only).await?;
+                }
+                // Generate loader after installation
+                PathSetup::install_loader(&project_root)?;
+                // Generate lockfile
+                generate_lockfile(install_root, &manifest, no_dev).await?;
+            }
+            // Invalid combination
+            (Some(_), Some(_)) => {
+                return Err(LpmError::Package(
+                    "Cannot specify both package and --path".to_string(),
+                ));
+            }
+        }
+
+        // Save updated manifest
+        manifest.save(&project_root)?;
+
+        Ok(())
+    }).await
+}
+
+/// Install a package globally
+async fn install_global(package_spec: String) -> LpmResult<()> {
+    println!("Installing {} globally...", package_spec);
+
+    // Parse package spec
+    let (package_name, version_constraint) = if let Some(at_pos) = package_spec.find('@') {
+        let name = package_spec[..at_pos].to_string();
+        let version = package_spec[at_pos + 1..].to_string();
+        parse_constraint(&version)
+            .map_err(|e| LpmError::Version(format!("Invalid version constraint '{}': {}", version, e)))?;
+        (name, Some(version))
+    } else {
+        (package_spec, None)
+    };
+
+    // Setup global directories
+    let global_root = global_dir()?;
+    let global_lua_modules = global_lua_modules_dir()?;
+    let global_bin = global_bin_dir()?;
+    
+    ensure_dir(&global_root)?;
+    ensure_dir(&global_lua_modules)?;
+    ensure_dir(&global_bin)?;
+
+    // Resolve version
+    let config = Config::load()?;
+    let cache = Cache::new(config.get_cache_dir()?)?;
+    let client = LuaRocksClient::new(&config, cache.clone());
+    let luarocks_manifest = client.fetch_manifest().await?;
+    let resolver = DependencyResolver::new(luarocks_manifest);
+    
+    let constraint_str = version_constraint.clone().unwrap_or_else(|| "*".to_string());
+    let mut deps = HashMap::new();
+    deps.insert(package_name.clone(), constraint_str);
+    
+    let resolved_versions = resolver.resolve(&deps).await?;
+    let version = resolved_versions.get(&package_name)
+        .ok_or_else(|| LpmError::Package(format!("Could not resolve version for '{}'", package_name)))?;
+    
+    let version_str = version.to_string();
+    println!("  Resolved version: {}", version_str);
+
+    // Create a global installer (using global_root as project_root)
+    let installer = PackageInstaller::new(&global_root)?;
+    installer.init()?;
+
+    // Install the package
+    let package_path = installer.install_package(&package_name, &version_str).await?;
+
+    // Extract executables from rockspec and create wrappers
+    let rockspec_url = lpm::luarocks::search_api::SearchAPI::new().get_rockspec_url(&package_name, &version_str, None);
+    let rockspec_content = client.download_rockspec(&rockspec_url).await?;
+    let rockspec = client.parse_rockspec(&rockspec_content)?;
+    
+    create_global_executables(&package_name, &package_path, &global_bin, &global_lua_modules, &rockspec).await?;
+
+    println!("✓ Installed {}@{} globally", package_name, version_str);
+    println!();
+    println!("Global tools are installed in: {}", global_bin.display());
+    println!("Add to your PATH: export PATH=\"{}$PATH\"", global_bin.display());
+
+    Ok(())
+}
+
+/// Create executable wrappers for globally installed packages
+async fn create_global_executables(
+    package_name: &str,
+    package_path: &std::path::Path,
+    global_bin: &std::path::Path,
+    global_lua_modules: &std::path::Path,
+    rockspec: &lpm::luarocks::rockspec::Rockspec,
+) -> LpmResult<()> {
+    let mut executables = Vec::new();
+
+    // First, check rockspec build.install.bin for explicitly defined executables.
+    for (exe_name, source_path) in &rockspec.build.install.bin {
+        let full_path = package_path.join(source_path);
+        if full_path.exists() && full_path.is_file() {
+            executables.push((exe_name.clone(), full_path));
+        } else {
+            // Try relative to package root if absolute path doesn't exist.
+            let alt_path = package_path.join(source_path.strip_prefix("/").unwrap_or(source_path));
+            if alt_path.exists() && alt_path.is_file() {
+                executables.push((exe_name.clone(), alt_path));
+            }
+        }
+    }
+
+    // Check for common executable locations.
+    let possible_paths = vec![
+        package_path.join("bin").join(package_name),
+        package_path.join("bin").join(format!("{}.lua", package_name)),
+        package_path.join(format!("{}.lua", package_name)),
+        package_path.join("cli.lua"),
+        package_path.join("main.lua"),
+    ];
+
+    for path in possible_paths {
+        if path.exists() && path.is_file() {
+            let exe_name = path.file_stem()
+                .and_then(|n| n.to_str())
+                .unwrap_or(package_name);
+            executables.push((exe_name.to_string(), path));
+        }
+    }
+
+    // Also check bin/ directory for any .lua files.
+    let bin_dir = package_path.join("bin");
+    if bin_dir.exists() && bin_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&bin_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if let Some(ext) = path.extension() {
+                        if ext == "lua" || ext.is_empty() {
+                            if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+                                executables.push((name.to_string(), path));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // If no executables found, create one with the package name.
+    if executables.is_empty() {
+        // Try to find a main entry point (init.lua).
+        let main_script = package_path.join("init.lua");
+        if main_script.exists() {
+            executables.push((package_name.to_string(), main_script));
+        }
+    }
+
+    // Track executable names for metadata.
+    let mut exe_names = Vec::new();
+
+    // Create wrapper scripts for each executable.
+    for (exe_name, script_path) in executables {
+        create_executable_wrapper(&exe_name, &script_path, global_bin, global_lua_modules)?;
+        exe_names.push(exe_name);
+    }
+
+    // Save metadata about this globally installed package.
+    save_global_package_metadata(package_name, &exe_names)?;
+
+    Ok(())
+}
+
+/// Save metadata about a globally installed package
+fn save_global_package_metadata(
+    package_name: &str,
+    executables: &[String],
+) -> LpmResult<()> {
+    use lpm::core::path::global_packages_metadata_dir;
+    use serde::{Deserialize, Serialize};
+    
+    #[derive(Serialize, Deserialize)]
+    struct GlobalPackageMetadata {
+        package: String,
+        executables: Vec<String>,
+    }
+
+    let metadata_dir = global_packages_metadata_dir()?;
+    ensure_dir(&metadata_dir)?;
+
+    let metadata = GlobalPackageMetadata {
+        package: package_name.to_string(),
+        executables: executables.to_vec(),
+    };
+
+    let metadata_file = metadata_dir.join(format!("{}.yaml", package_name));
+    let content = serde_yaml::to_string(&metadata)?;
+    fs::write(&metadata_file, content)?;
+
+    Ok(())
+}
+
+/// Create a wrapper script for a global executable
+fn create_executable_wrapper(
+    exe_name: &str,
+    script_path: &std::path::Path,
+    global_bin: &std::path::Path,
+    global_lua_modules: &std::path::Path,
+) -> LpmResult<()> {
+    use lpm::core::path::lpm_home;
+    use lpm::lua_manager::VersionSwitcher;
+    
+    // Get LPM-managed Lua binary path.
+    let lpm_home = lpm_home()?;
+    let switcher = VersionSwitcher::new(&lpm_home);
+    let lua_version = switcher.current().unwrap_or_else(|_| "5.4.8".to_string());
+    let lua_bin = lpm_home.join("versions").join(&lua_version).join("bin").join("lua");
+    
+    // If LPM-managed Lua doesn't exist, fall back to system lua.
+    let lua_binary = if lua_bin.exists() {
+        lua_bin.to_string_lossy().to_string()
+    } else {
+        "lua".to_string()
+    };
+
+    // Create wrapper script
+    let wrapper_path = global_bin.join(exe_name);
+    
+    #[cfg(unix)]
+    {
+        let wrapper_content = format!(
+            r#"#!/bin/sh
+# Wrapper for {} (installed globally by LPM)
+export LUA_PATH="{}/?.lua;{}/?/init.lua;$LUA_PATH"
+exec "{}" "{}" "$@"
+"#,
+            exe_name,
+            global_lua_modules.to_string_lossy(),
+            global_lua_modules.to_string_lossy(),
+            lua_binary,
+            script_path.to_string_lossy()
+        );
+        fs::write(&wrapper_path, wrapper_content)?;
+        // Set executable permissions on Unix.
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&wrapper_path)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&wrapper_path, perms)?;
+    }
+
+    #[cfg(windows)]
+    {
+        let wrapper_content = format!(
+            r#"@echo off
+REM Wrapper for {} (installed globally by LPM)
+set LUA_PATH={}\?.lua;{}\?\init.lua;%LUA_PATH%
+"{}" "{}" %*
+"#,
+            exe_name,
+            global_lua_modules.to_string_lossy().replace('\\', "\\\\"),
+            global_lua_modules.to_string_lossy().replace('\\', "\\\\"),
+            lua_binary,
+            script_path.to_string_lossy()
+        );
+        fs::write(&wrapper_path.with_extension("bat"), wrapper_content)?;
+    }
+
+    println!("  ✓ Created global executable: {}", exe_name);
+
+    Ok(())
+}
+
+fn install_from_path(
+    local_path: &str,
+    dev: bool,
+    manifest: &mut PackageManifest,
+) -> LpmResult<()> {
+    let path = Path::new(local_path);
+    if !path.exists() {
+        return Err(LpmError::Package(format!(
+            "Path does not exist: {}",
+            local_path
+        )));
+    }
+
+    // Try to load package.yaml from the specified path.
+    let local_manifest = PackageManifest::load(path)?;
+
+    // Add local package as dependency.
+    let dep_name = local_manifest.name.clone();
+    let dep_version = format!("path:{}", local_path);
+
+    if dev {
+        manifest.dev_dependencies.insert(dep_name.clone(), dep_version.clone());
+        println!("Added {} as dev dependency (from {})", dep_name, local_path);
+    } else {
+        manifest.dependencies.insert(dep_name.clone(), dep_version.clone());
+        println!("Added {} as dependency (from {})", dep_name, local_path);
+    }
+
+    Ok(())
+}
+
+async fn install_package(
+    project_root: &Path,
+    pkg_spec: &str,
+    dev: bool,
+    manifest: &mut PackageManifest,
+) -> LpmResult<()> {
+    // Parse package spec (format: "package" or "package@version" or "package@^1.2.3").
+    let (package_name, version_constraint) = if let Some(at_pos) = pkg_spec.find('@') {
+        let name = pkg_spec[..at_pos].to_string();
+        let version = pkg_spec[at_pos + 1..].to_string();
+        
+        // Validate version constraint format.
+        parse_constraint(&version)
+            .map_err(|e| LpmError::Version(format!("Invalid version constraint '{}': {}", version, e)))?;
+        
+        (name, Some(version))
+    } else {
+        (pkg_spec.to_string(), None)
+    };
+
+    // Check for dependency conflicts before adding.
+    let version_str = version_constraint.clone().unwrap_or_else(|| "*".to_string());
+    ConflictChecker::check_new_dependency(manifest, &package_name, &version_str)?;
+
+    println!("Installing package: {}", package_name);
+    
+    // Resolve version using dependency resolver (handles version constraints).
+    let config = Config::load()?;
+    let cache = Cache::new(config.get_cache_dir()?)?;
+    let client = LuaRocksClient::new(&config, cache.clone());
+    let luarocks_manifest = client.fetch_manifest().await?;
+    let resolver = DependencyResolver::new(luarocks_manifest);
+    
+    // Build dependency map for resolver.
+    let constraint_str = version_constraint.clone().unwrap_or_else(|| "*".to_string());
+    let mut deps = HashMap::new();
+    deps.insert(package_name.clone(), constraint_str);
+    
+    // Resolve to exact version using dependency resolver.
+    let resolved_versions = resolver.resolve(&deps).await?;
+    let version = resolved_versions.get(&package_name)
+        .ok_or_else(|| LpmError::Package(format!("Could not resolve version for '{}'", package_name)))?;
+    
+    let version_str = version.to_string();
+    println!("  Resolved version: {}", version_str);
+    
+    let installer = PackageInstaller::new(project_root)?;
+    installer.init()?;
+    installer.install_package(&package_name, &version_str).await?;
+    
+    // Generate loader after installation
+    PathSetup::install_loader(project_root)?;
+    
+    // Store constraint in manifest (resolved version goes in lockfile).
+    let constraint_to_store = version_constraint.unwrap_or_else(|| version_str.clone());
+    if dev {
+        manifest.dev_dependencies.insert(package_name, constraint_to_store);
+    } else {
+        manifest.dependencies.insert(package_name, constraint_to_store);
+    }
+    
+    Ok(())
+}
+
+async fn install_all_dependencies(
+    project_root: &Path,
+    manifest: &PackageManifest,
+    no_dev: bool,
+    dev_only: bool,
+) -> LpmResult<()> {
+    if no_dev && dev_only {
+        return Err(LpmError::Package(
+            "Cannot use both --no-dev and --dev-only flags".to_string(),
+        ));
+    }
+
+    println!("Installing dependencies...");
+
+    // Initialize package installer.
+    let installer = PackageInstaller::new(project_root)?;
+    installer.init()?;
+
+    let mut total_deps = 0;
+    let mut installed_count = 0;
+
+    // Install regular dependencies (unless dev_only flag is set).
+    if !dev_only {
+        total_deps += manifest.dependencies.len();
+        for (name, version) in &manifest.dependencies {
+            println!("  Installing {}@{}", name, version);
+            installer.install_package(name, version).await?;
+            installed_count += 1;
+        }
+    }
+
+    // Install dev dependencies (unless no_dev flag is set).
+    if !no_dev {
+        total_deps += manifest.dev_dependencies.len();
+        for (name, version) in &manifest.dev_dependencies {
+            println!("  Installing {}@{} (dev)", name, version);
+            installer.install_package(name, version).await?;
+            installed_count += 1;
+        }
+    }
+
+    if total_deps == 0 {
+        println!("No dependencies to install");
+        return Ok(());
+    }
+
+    println!("✓ Installed {} package(s)", installed_count);
+    if no_dev {
+        println!("  (dev dependencies skipped)");
+    } else if dev_only {
+        println!("  (only dev dependencies)");
+    }
+
+    Ok(())
+}
+
+async fn install_workspace_dependencies(
+    install_root: &Path,
+    workspace: &Workspace,
+    no_dev: bool,
+    dev_only: bool,
+) -> LpmResult<()> {
+    println!("Installing workspace dependencies...");
+
+    let installer = PackageInstaller::new(install_root)?;
+    installer.init()?;
+
+    // Resolve all workspace dependencies.
+    let config = Config::load()?;
+    let cache = Cache::new(config.get_cache_dir()?)?;
+    let client = LuaRocksClient::new(&config, cache.clone());
+    let luarocks_manifest = client.fetch_manifest().await?;
+    let resolver = DependencyResolver::new(luarocks_manifest);
+
+    // Collect all dependencies from workspace packages.
+    let mut all_dependencies = HashMap::new();
+    let mut all_dev_dependencies = HashMap::new();
+    
+    for workspace_pkg in workspace.packages.values() {
+        // Collect regular dependencies from workspace package.
+        if !dev_only {
+            for (dep_name, dep_version) in &workspace_pkg.manifest.dependencies {
+                // Use most restrictive constraint if multiple packages specify the same dependency
+                all_dependencies.entry(dep_name.clone())
+                    .or_insert_with(|| dep_version.clone());
+            }
+        }
+        
+        // Collect dev dependencies from workspace package.
+        if !no_dev {
+            for (dep_name, dep_version) in &workspace_pkg.manifest.dev_dependencies {
+                all_dev_dependencies.entry(dep_name.clone())
+                    .or_insert_with(|| dep_version.clone());
+            }
+        }
+    }
+
+    // Resolve versions
+    let resolved_versions = resolver.resolve(&all_dependencies).await?;
+    let resolved_dev_versions = if !all_dev_dependencies.is_empty() {
+        resolver.resolve(&all_dev_dependencies).await?
+    } else {
+        HashMap::new()
+    };
+
+    let mut installed_count = 0;
+
+    // Install regular dependencies
+    for (name, version) in &resolved_versions {
+        println!("  Installing {}@{} (shared)", name, version);
+        installer.install_package(name, &version.to_string()).await?;
+        installed_count += 1;
+    }
+
+    if !no_dev {
+        for (name, version) in &resolved_dev_versions {
+            println!("  Installing {}@{} (shared, dev)", name, version);
+            installer.install_package(name, &version.to_string()).await?;
+            installed_count += 1;
+        }
+    }
+
+    println!("\n✓ Installed {} shared dependency(ies) at workspace root", installed_count);
+
+    Ok(())
+}
+
+async fn generate_lockfile(project_root: &Path, manifest: &PackageManifest, no_dev: bool) -> LpmResult<()> {
+    // Load config to get cache directory
+    let config = Config::load()?;
+    let cache = Cache::new(config.get_cache_dir()?)?;
+    
+    // Try to load existing lockfile for incremental updates
+    let existing_lockfile = Lockfile::load(project_root)?;
+    
+    let builder = LockfileBuilder::new(cache);
+    let lockfile = if let Some(existing) = existing_lockfile {
+        // Use incremental update
+        builder.update_lockfile(&existing, manifest, project_root, no_dev).await?
+    } else {
+        // Build from scratch
+        builder.build_lockfile(manifest, project_root, no_dev).await?
+    };
+    
+    // Save lockfile
+    lockfile.save(project_root)?;
+    
+    println!("✓ Generated package.lock");
+    if no_dev {
+        println!("  (dev dependencies excluded)");
+    }
+    
+    Ok(())
+}
+
+/// Interactive package installation
+pub async fn run_interactive(
+    project_root: &Path,
+    dev: bool,
+    manifest: &mut PackageManifest,
+) -> LpmResult<()> {
+    println!("🔍 Interactive Package Installation\n");
+
+    // Fetch manifest
+    println!("Loading package list...");
+    let config = Config::load()?;
+    let cache = Cache::new(config.get_cache_dir()?)?;
+    let client = LuaRocksClient::new(&config, cache);
+    let luarocks_manifest = client.fetch_manifest().await?;
+
+    // Get search query
+    let query: String = Input::new()
+        .with_prompt("Search for packages")
+        .allow_empty(false)
+        .interact_text()
+        .map_err(|e| LpmError::Config(format!("Failed to read input: {}", e)))?;
+
+    // Search packages (fuzzy match)
+    let matcher = SkimMatcherV2::default();
+    let mut matches: Vec<(String, i64)> = luarocks_manifest
+        .packages
+        .keys()
+        .filter_map(|name| {
+            matcher.fuzzy_match(name, &query).map(|score| (name.clone(), score))
+        })
+        .collect();
+
+    // Sort by score (higher is better)
+    matches.sort_by(|a, b| b.1.cmp(&a.1));
+    matches.truncate(20); // Limit to top 20 results
+
+    if matches.is_empty() {
+        println!("No packages found matching '{}'", query);
+        return Ok(());
+    }
+
+    // Display results
+    let package_names: Vec<String> = matches.iter().map(|(name, _)| name.clone()).collect();
+    
+    println!("\nFound {} package(s):\n", package_names.len());
+    for (i, name) in package_names.iter().enumerate() {
+        if let Some(latest) = luarocks_manifest.get_latest_version(name) {
+            println!("  {}. {} (latest: {})", i + 1, name, latest.version);
+        } else {
+            println!("  {}. {}", i + 1, name);
+        }
+    }
+
+    // Select packages
+    let selections = MultiSelect::new()
+        .with_prompt("Select packages to install (space to select, enter to confirm)")
+        .items(&package_names)
+        .interact()
+        .map_err(|e| LpmError::Config(format!("Failed to read input: {}", e)))?;
+
+    if selections.is_empty() {
+        println!("No packages selected.");
+        return Ok(());
+    }
+
+    // Collect package selections with version and dependency type
+    struct PackageSelection {
+        name: String,
+        version: String,
+        is_dev: bool,
+        description: Option<String>,
+        license: Option<String>,
+        homepage: Option<String>,
+        dependencies: Vec<String>,
+    }
+
+    let mut package_selections: Vec<PackageSelection> = Vec::new();
+
+    println!("\n📦 Configuring selected packages:\n");
+
+    for &idx in &selections {
+        let package_name = &package_names[idx];
+        
+        // Get available versions
+        let versions = luarocks_manifest.get_package_versions(package_name);
+        if versions.is_none() || versions.unwrap().is_empty() {
+            eprintln!("⚠️  Warning: Could not find versions for {}, skipping", package_name);
+            continue;
+        }
+
+        let versions = versions.unwrap();
+        let version_strings: Vec<String> = versions.iter().map(|pv| pv.version.clone()).collect();
+        
+        // Sort versions (latest first) - simple string sort should work for most cases
+        let mut sorted_versions = version_strings.clone();
+        sorted_versions.sort_by(|a, b| b.cmp(a)); // Reverse sort (latest first)
+
+        // Select version
+        println!("Package: {}", package_name);
+        let version_selection = Select::new()
+            .with_prompt("Select version")
+            .items(&sorted_versions)
+            .default(0) // Default to latest
+            .interact()
+            .map_err(|e| LpmError::Config(format!("Failed to read input: {}", e)))?;
+        
+        let selected_version = sorted_versions[version_selection].clone();
+
+        // Find the selected version's PackageVersion to get rockspec URL
+        let selected_pkg_version = versions.iter()
+            .find(|pv| pv.version == selected_version)
+            .ok_or_else(|| LpmError::Package(format!("Version {} not found for {}", selected_version, package_name)))?;
+
+        // Fetch and parse rockspec to get metadata and dependencies
+        println!("  Fetching package metadata...");
+        let rockspec_content = client.download_rockspec(&selected_pkg_version.rockspec_url).await?;
+        let rockspec = client.parse_rockspec(&rockspec_content)?;
+
+        // Select dependency type (dev or prod)
+        let dep_type_options = vec!["Production dependency", "Development dependency"];
+        let default_dep_type = if dev { 1 } else { 0 };
+        
+        let dep_type_selection = Select::new()
+            .with_prompt("Dependency type")
+            .items(&dep_type_options)
+            .default(default_dep_type)
+            .interact()
+            .map_err(|e| LpmError::Config(format!("Failed to read input: {}", e)))?;
+        
+        let is_dev = dep_type_selection == 1;
+        
+        package_selections.push(PackageSelection {
+            name: package_name.clone(),
+            version: selected_version,
+            is_dev,
+            description: rockspec.description.clone(),
+            license: rockspec.license.clone(),
+            homepage: rockspec.homepage.clone(),
+            dependencies: rockspec.dependencies.clone(),
+        });
+        
+        println!(); // Empty line between packages
+    }
+
+    if package_selections.is_empty() {
+        println!("No valid packages to install.");
+        return Ok(());
+    }
+
+    // Show detailed summary with metadata and dependencies
+    println!("\n📋 Installation Summary:\n");
+    for selection in &package_selections {
+        let dep_type = if selection.is_dev { "dev" } else { "prod" };
+        println!("  📦 {}@{} ({})", selection.name, selection.version, dep_type);
+        
+        if let Some(ref desc) = selection.description {
+            println!("     Description: {}", desc);
+        }
+        
+        if let Some(ref license) = selection.license {
+            println!("     License: {}", license);
+        }
+        
+        if let Some(ref homepage) = selection.homepage {
+            println!("     Homepage: {}", homepage);
+        }
+        
+        if !selection.dependencies.is_empty() {
+            println!("     Dependencies:");
+            for dep in &selection.dependencies {
+                println!("       - {}", dep);
+            }
+        }
+        
+        println!(); // Empty line between packages
+    }
+
+    let confirmed = Confirm::new()
+        .with_prompt(format!("Install {} package(s)?", package_selections.len()))
+        .default(true)
+        .interact()
+        .map_err(|e| LpmError::Config(format!("Failed to read input: {}", e)))?;
+
+    if !confirmed {
+        println!("Cancelled.");
+        return Ok(());
+    }
+
+    // Install selected packages
+    let installer = PackageInstaller::new(project_root)?;
+    installer.init()?;
+
+    for selection in &package_selections {
+        println!("\nInstalling {}@{}...", selection.name, selection.version);
+        
+        // Check for conflicts
+        ConflictChecker::check_new_dependency(manifest, &selection.name, "*")?;
+        
+        // Install
+        installer.install_package(&selection.name, &selection.version).await?;
+        
+        // Add to manifest
+        if selection.is_dev {
+            manifest.dev_dependencies.insert(selection.name.clone(), "*".to_string());
+        } else {
+            manifest.dependencies.insert(selection.name.clone(), "*".to_string());
+        }
+        
+        println!("✓ Installed {}", selection.name);
+    }
+
+    // Generate loader
+    PathSetup::install_loader(project_root)?;
+
+    // Generate lockfile
+    generate_lockfile(project_root, manifest, false).await?;
+
+    println!("\n✓ Installed {} package(s)", selections.len());
+
+    Ok(())
+}

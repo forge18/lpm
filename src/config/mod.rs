@@ -1,0 +1,146 @@
+use crate::core::{LpmError, LpmResult};
+use crate::core::path::{config_file, ensure_dir};
+use serde::{Deserialize, Serialize};
+use std::fs;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Config {
+    /// LuaRocks manifest URL
+    #[serde(default = "default_luarocks_manifest_url")]
+    pub luarocks_manifest_url: String,
+
+    /// Cache directory (defaults to platform-specific cache directory)
+    /// 
+    /// Default locations:
+    /// - Windows: %LOCALAPPDATA%\lpm\cache
+    /// - Linux: ~/.cache/lpm
+    /// - macOS: ~/Library/Caches/lpm
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_dir: Option<String>,
+
+    /// Whether to verify checksums on install
+    #[serde(default = "default_true")]
+    pub verify_checksums: bool,
+
+    /// Whether to show diffs on update
+    #[serde(default = "default_true")]
+    pub show_diffs_on_update: bool,
+
+    /// Default Lua binary source URL (defaults to dyne/luabinaries)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lua_binary_source_url: Option<String>,
+
+    /// Per-version Lua binary source URLs
+    /// Example: { "5.4.8": "https://custom-source.com/binaries" }
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lua_binary_sources: Option<std::collections::HashMap<String, String>>,
+}
+
+fn default_luarocks_manifest_url() -> String {
+    "https://luarocks.org/manifests/luarocks/manifest".to_string()
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            luarocks_manifest_url: default_luarocks_manifest_url(),
+            cache_dir: None,
+            verify_checksums: true,
+            show_diffs_on_update: true,
+            lua_binary_source_url: None,
+            lua_binary_sources: None,
+        }
+    }
+}
+
+impl Config {
+    /// Load config from platform-specific config directory, creating default if it doesn't exist
+    /// 
+    /// Config locations:
+    /// - Windows: %APPDATA%\lpm\config.yaml
+    /// - Linux: ~/.config/lpm/config.yaml
+    /// - macOS: ~/Library/Application Support/lpm/config.yaml
+    pub fn load() -> LpmResult<Self> {
+        let config_path = config_file()?;
+
+        if !config_path.exists() {
+            // Create default config
+            let config = Self::default();
+            config.save()?;
+            return Ok(config);
+        }
+
+        let content = fs::read_to_string(&config_path)?;
+        let config: Config = serde_yaml::from_str(&content)
+            .map_err(|e| LpmError::Config(format!("Failed to parse config: {}", e)))?;
+
+        Ok(config)
+    }
+
+    /// Save config to platform-specific config directory
+    /// 
+    /// Config locations:
+    /// - Windows: %APPDATA%\lpm\config.yaml
+    /// - Linux: ~/.config/lpm/config.yaml
+    /// - macOS: ~/Library/Application Support/lpm/config.yaml
+    pub fn save(&self) -> LpmResult<()> {
+        let config_path = config_file()?;
+        let config_dir = config_path.parent().unwrap();
+
+        // Ensure config directory exists
+        ensure_dir(config_dir)?;
+
+        let content = serde_yaml::to_string(self)
+            .map_err(|e| LpmError::Config(format!("Failed to serialize config: {}", e)))?;
+
+        fs::write(&config_path, content)?;
+        Ok(())
+    }
+
+    /// Get the cache directory path
+    pub fn get_cache_dir(&self) -> LpmResult<std::path::PathBuf> {
+        if let Some(ref dir) = self.cache_dir {
+            Ok(std::path::PathBuf::from(dir))
+        } else {
+            crate::core::path::cache_dir()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_config_default() {
+        let config = Config::default();
+        assert_eq!(
+            config.luarocks_manifest_url,
+            "https://luarocks.org/manifests/luarocks/manifest"
+        );
+        assert!(config.verify_checksums);
+        assert!(config.show_diffs_on_update);
+    }
+
+    #[test]
+    fn test_config_save_and_load() {
+        let temp = TempDir::new().unwrap();
+        let config_path = temp.path().join("config.yaml");
+
+        // Mock the config_file function for testing
+        // In a real scenario, we'd use dependency injection
+        let config = Config::default();
+        let content = serde_yaml::to_string(&config).unwrap();
+        std::fs::write(&config_path, content).unwrap();
+
+        let loaded_content = std::fs::read_to_string(&config_path).unwrap();
+        let loaded: Config = serde_yaml::from_str(&loaded_content).unwrap();
+
+        assert_eq!(config.luarocks_manifest_url, loaded.luarocks_manifest_url);
+    }
+}
