@@ -3,6 +3,7 @@
 **Local, project-scoped package management for Lua.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Status: Alpha](https://img.shields.io/badge/Status-Alpha-orange)](https://github.com/yourusername/lpm)
 
 LPM provides local, project-scoped package management for Lua, similar to npm, cargo, or bundler. It solves the problem of global package installations that cause dependency conflicts and make CI/CD difficult.
 
