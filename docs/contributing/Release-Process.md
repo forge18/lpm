@@ -60,8 +60,13 @@ If GitHub Actions fails, build manually:
 # Build all installers
 ./scripts/build-installer.sh all
 
-# Create release on GitHub
-# Upload files from .output/
+# Files will be in releases/v{VERSION}/
+# Commit and push the releases/ directory
+git add releases/
+git commit -m "Add release files for v{VERSION}"
+git push
+
+# Create release on GitHub (via tag or workflow_dispatch)
 ```
 
 ## Release Assets

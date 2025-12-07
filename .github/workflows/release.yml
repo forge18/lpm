@@ -11,252 +11,49 @@ on:
         required: false
         type: string
 
+permissions:
+  contents: write
+
 jobs:
-  build:
-    name: Build ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Linux builds
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            artifact_name: lpm-linux-x86_64
-            artifact_ext: tar.gz
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            artifact_name: lpm-linux-aarch64
-            artifact_ext: tar.gz
-          # macOS builds (both architectures on same runner)
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            artifact_name: lpm-macos-aarch64
-            artifact_ext: pkg
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            artifact_name: lpm-macos-x86_64
-            artifact_ext: pkg
-          # Windows build
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact_name: lpm-windows-x86_64
-            artifact_ext: zip
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: Install Zig (macOS/Linux)
-        if: matrix.os != 'windows-latest'
-        run: |
-          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            brew install zig
-          else
-            wget -q https://ziglang.org/download/0.12.0/zig-linux-x86_64-0.12.0.tar.xz
-            tar -xf zig-linux-x86_64-0.12.0.tar.xz
-            sudo mv zig-linux-x86_64-0.12.0 /opt/zig
-            sudo ln -s /opt/zig/zig /usr/local/bin/zig
-          fi
-
-      - name: Install cargo-zigbuild (macOS/Linux)
-        if: matrix.os != 'windows-latest'
-        run: cargo install cargo-zigbuild
-
-      - name: Install LLVM/clang (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          choco install llvm -y
-          echo "$env:ChocolateyInstall\lib\llvm\tools\bin" >> $env:GITHUB_PATH
-
-      - name: Install cargo-xwin (Windows)
-        if: matrix.os == 'windows-latest'
-        run: cargo install cargo-xwin
-
-      - name: Install llvm-tools (Windows)
-        if: matrix.os == 'windows-latest'
-        run: rustup component add llvm-tools
-
-      - name: Build binary (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          cargo xwin build --release --target ${{ matrix.target }}
-          if (-not (Test-Path "target/${{ matrix.target }}/release/lpm.exe")) {
-            Write-Host "Error: Binary not found"
-            exit 1
-          }
-
-      - name: Build binary (macOS)
-        if: matrix.os == 'macos-latest'
-        shell: bash
-        run: |
-          SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
-          export SDKROOT
-          export RUSTFLAGS="-C link-arg=-F${SDKROOT}/System/Library/Frameworks"
-          cargo zigbuild --release --target ${{ matrix.target }}
-          if [ ! -f "target/${{ matrix.target }}/release/lpm" ]; then
-            echo "Error: Binary not found"
-            exit 1
-          fi
-
-      - name: Build binary (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        shell: bash
-        run: |
-          set -e
-          echo "Building for target: ${{ matrix.target }}"
-          cargo zigbuild --release --target ${{ matrix.target }}
-          BINARY="target/${{ matrix.target }}/release/lpm"
-          if [ ! -f "$BINARY" ]; then
-            echo "ERROR: Binary not found at $BINARY"
-            echo "Contents of target/${{ matrix.target }}/release/:"
-            ls -la "target/${{ matrix.target }}/release/" || echo "Directory does not exist"
-            exit 1
-          fi
-          echo "✓ Build successful: $BINARY ($(du -h "$BINARY" | cut -f1))"
-
-      - name: Package binary (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path .output | Out-Null
-          $binary = "target/${{ matrix.target }}/release/lpm.exe"
-          $artifact = ".output/${{ matrix.artifact_name }}.${{ matrix.artifact_ext }}"
-          
-          New-Item -ItemType Directory -Force -Path lpm-release | Out-Null
-          Copy-Item $binary lpm-release/
-          
-          Compress-Archive -Path lpm-release/* -DestinationPath $artifact -Force
-          
-          Remove-Item -Recurse -Force lpm-release
-          
-          Write-Host "Created artifact: $artifact"
-          Get-ChildItem .output/
-
-      - name: Package binary (macOS)
-        if: matrix.os == 'macos-latest'
-        shell: bash
-        run: |
-          mkdir -p .output
-          BINARY="target/${{ matrix.target }}/release/lpm"
-          ARTIFACT=".output/${{ matrix.artifact_name }}.${{ matrix.artifact_ext }}"
-          
-          # Try to create .pkg, fallback to tar.gz
-          if command -v pkgbuild &> /dev/null; then
-            mkdir -p installer-payload/usr/local/bin
-            cp "$BINARY" installer-payload/usr/local/bin/
-            VERSION=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)
-            if pkgbuild --root installer-payload \
-                       --identifier com.lpm.installer \
-                       --version "$VERSION" \
-                       --install-location / \
-                       "$ARTIFACT"; then
-              echo "✓ Created $ARTIFACT"
-            else
-              echo "pkgbuild failed, creating tar.gz instead"
-              mkdir -p lpm-release
-              cp "$BINARY" lpm-release/
-              tar czf ".output/${{ matrix.artifact_name }}.tar.gz" -C lpm-release lpm
-              rm -rf lpm-release
-            fi
-            rm -rf installer-payload
-          else
-            echo "pkgbuild not available, creating tar.gz"
-            mkdir -p lpm-release
-            cp "$BINARY" lpm-release/
-            tar czf ".output/${{ matrix.artifact_name }}.tar.gz" -C lpm-release lpm
-            rm -rf lpm-release
-          fi
-          
-          echo "Created artifact: $ARTIFACT"
-          ls -lh .output/
-
-      - name: Package binary (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        shell: bash
-        run: |
-          set -e  # Exit on error
-          mkdir -p .output
-          BINARY="target/${{ matrix.target }}/release/lpm"
-          ARTIFACT=".output/${{ matrix.artifact_name }}.${{ matrix.artifact_ext }}"
-          
-          echo "Binary path: $BINARY"
-          if [ ! -f "$BINARY" ]; then
-            echo "ERROR: Binary not found at $BINARY"
-            ls -la "target/${{ matrix.target }}/release/" || echo "Release directory does not exist"
-            exit 1
-          fi
-          
-          echo "Binary found, size: $(du -h "$BINARY" | cut -f1)"
-          
-          mkdir -p lpm-release
-          cp "$BINARY" lpm-release/
-          
-          echo "Creating archive: $ARTIFACT"
-          tar czf "$ARTIFACT" -C lpm-release lpm
-          
-          if [ ! -f "$ARTIFACT" ]; then
-            echo "ERROR: Archive not created at $ARTIFACT"
-            exit 1
-          fi
-          
-          rm -rf lpm-release
-          
-          echo "✓ Created artifact: $ARTIFACT"
-          echo "Artifact size: $(du -h "$ARTIFACT" | cut -f1)"
-          ls -lh .output/
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact_name }}
-          path: .output/${{ matrix.artifact_name }}.*
-          if-no-files-found: error
-
-  release:
+  create-release:
     name: Create Release
-    needs: build
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: List installer files
+      
+      - name: Get the release version
+        id: version
+        shell: bash
         run: |
-          echo "Installer files to be uploaded:"
-          find artifacts -type f -name "lpm-*" | sort || echo "No files found"
-
-      - name: Extract version from tag
-        id: tag_version
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/v}
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Tag version: $VERSION"
-
+          echo "version is: $VERSION"
+      
+      - name: Check that tag version and Cargo.toml version are the same
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if ! grep -q "version = \"$VERSION\"" Cargo.toml; then
+            echo "version does not match Cargo.toml" >&2
+            exit 1
+          fi
+      
       - name: Extract changelog for version
         id: changelog
         run: |
-          # Extract changelog section for this version
-          VERSION="${{ steps.tag_version.outputs.version }}"
+          VERSION="${{ steps.version.outputs.version }}"
           
           # Use Python to extract the changelog section reliably
           python3 << 'EOF'
           import re
           import sys
           
-          version = "${{ steps.tag_version.outputs.version }}"
+          version = "${{ steps.version.outputs.version }}"
           
           try:
               with open('CHANGELOG.md', 'r') as f:
@@ -289,12 +86,54 @@ jobs:
           echo "Release notes:"
           cat release_notes.md
 
-      - name: Create Release
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            artifacts/**/lpm-*
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
           body_path: release_notes.md
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  upload-files:
+    name: Upload Release Files
+    needs: create-release
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Get version
+        id: version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Check for build files
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          RELEASE_DIR="releases/v${VERSION}"
+          
+          if [ ! -d "$RELEASE_DIR" ] || [ -z "$(ls -A "$RELEASE_DIR" 2>/dev/null)" ]; then
+            echo "⚠ No build files found in ${RELEASE_DIR}/!"
+            echo ""
+            echo "Build files locally first:"
+            echo "  ./scripts/build-installer.sh all"
+            echo ""
+            echo "Then commit and push the releases/ directory"
+            exit 1
+          fi
+          
+          echo "Found files in ${RELEASE_DIR}/:"
+          ls -lh "$RELEASE_DIR"
+      
+      - name: Upload files to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            releases/v${{ steps.version.outputs.version }}/*
+          tag_name: v${{ steps.version.outputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

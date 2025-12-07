@@ -9,8 +9,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-# Create output directory
-mkdir -p .output
+# Get version from Cargo.toml
+VERSION=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)
+if [ -z "$VERSION" ]; then
+    echo "⚠ Failed to extract version from Cargo.toml"
+    exit 1
+fi
+
+# Create versioned output directory
+RELEASE_DIR="releases/v${VERSION}"
+mkdir -p "$RELEASE_DIR"
 
 PLATFORM="${1:-all}"
 
@@ -74,8 +82,7 @@ build_macos() {
             mkdir -p installer-payload/usr/local/bin
             cp "target/$TARGET/release/lpm" installer-payload/usr/local/bin/
             
-            VERSION=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)
-            OUTPUT_FILE=".output/lpm-macos-${ARCH}.pkg"
+            OUTPUT_FILE="${RELEASE_DIR}/lpm-v${VERSION}-macos-${ARCH}.pkg"
             
             if pkgbuild --root installer-payload \
                        --identifier com.lpm.installer \
@@ -93,14 +100,14 @@ build_macos() {
             # Fallback: create tar.gz instead
             mkdir -p lpm-release
             cp "target/$TARGET/release/lpm" lpm-release/
-            tar czf ".output/lpm-macos-${ARCH}.tar.gz" -C lpm-release lpm
+            tar czf "${RELEASE_DIR}/lpm-v${VERSION}-macos-${ARCH}.tar.gz" -C lpm-release lpm
             rm -rf lpm-release
-            echo "✓ Created .output/lpm-macos-${ARCH}.tar.gz (fallback)"
+            echo "✓ Created ${RELEASE_DIR}/lpm-v${VERSION}-macos-${ARCH}.tar.gz (fallback)"
         fi
     done
     
     # Verify at least one file was created
-    if [ -z "$(ls -A .output/lpm-macos-* 2>/dev/null)" ]; then
+    if [ -z "$(ls -A ${RELEASE_DIR}/lpm-v${VERSION}-macos-* 2>/dev/null)" ]; then
         echo "⚠ No macOS installers were created"
         return 1
     fi
@@ -167,11 +174,11 @@ EOF
         
         # Create zip file
         cd lpm-windows-release
-        zip -q ../.output/lpm-windows-x86_64.zip lpm.exe install.bat
+        zip -q "../${RELEASE_DIR}/lpm-v${VERSION}-windows-x86_64.zip" lpm.exe install.bat
         cd ..
         rm -rf lpm-windows-release
         
-        echo "✓ Created .output/lpm-windows-x86_64.zip"
+        echo "✓ Created ${RELEASE_DIR}/lpm-v${VERSION}-windows-x86_64.zip"
     else
         echo "⚠ Failed to build Windows binary. Install Windows target with:"
         echo "   rustup target add x86_64-pc-windows-msvc"
@@ -219,9 +226,9 @@ build_linux() {
         mkdir -p lpm-release
         cp "target/$TARGET/release/lpm" lpm-release/
         ARCH_NAME=$(echo "$TARGET" | sed 's/unknown-linux-gnu//' | sed 's/-//')
-        tar czf ".output/lpm-linux-${ARCH_NAME}.tar.gz" -C lpm-release lpm
+        tar czf "${RELEASE_DIR}/lpm-v${VERSION}-linux-${ARCH_NAME}.tar.gz" -C lpm-release lpm
         rm -rf lpm-release
-        echo "✓ Created .output/lpm-linux-${ARCH_NAME}.tar.gz"
+        echo "✓ Created ${RELEASE_DIR}/lpm-v${VERSION}-linux-${ARCH_NAME}.tar.gz"
     done
 }
 
@@ -241,7 +248,9 @@ case "$PLATFORM" in
         build_linux || echo "⚠ Linux build failed"
         build_windows || echo "⚠ Windows build failed"
         echo ""
-        echo "Build process completed. Check .output/ for generated installers."
+        echo ""
+        echo "Build process completed. Check ${RELEASE_DIR}/ for generated installers."
+        echo "Version: v${VERSION}"
         ;;
     *)
         echo "Unknown platform: $PLATFORM"

@@ -130,12 +130,12 @@ Build installers using the provided script:
 - **Windows**: `clang` (install via `brew install llvm` on macOS) and `cargo-xwin` (installed automatically if missing)
 - **macOS**: Xcode Command Line Tools (for `pkgbuild`)
 
-This will create platform-specific installers in the `.output/` directory:
-- **macOS**: `.output/lpm-macos-{arch}.pkg` (e.g., `lpm-macos-aarch64.pkg`, `lpm-macos-x86_64.pkg`)
-- **Linux**: `.output/lpm-linux-{arch}.tar.gz` (e.g., `lpm-linux-x86_64.tar.gz`, `lpm-linux-aarch64.tar.gz`)
-- **Windows**: `.output/lpm-windows-x86_64.zip` (includes `lpm.exe` and `install.bat`)
+This will create platform-specific installers in the `releases/v{VERSION}/` directory:
+- **macOS**: `releases/v{VERSION}/lpm-v{VERSION}-macos-{arch}.pkg` (e.g., `lpm-v0.1.0-macos-aarch64.pkg`)
+- **Linux**: `releases/v{VERSION}/lpm-v{VERSION}-linux-{arch}.tar.gz` (e.g., `lpm-v0.1.0-linux-x86_64.tar.gz`)
+- **Windows**: `releases/v{VERSION}/lpm-v{VERSION}-windows-x86_64.zip` (includes `lpm.exe` and `install.bat`)
 
-All installers follow the naming convention: `lpm-{platform}-{arch}.{ext}`
+All installers follow the naming convention: `lpm-v{VERSION}-{platform}-{arch}.{ext}`
 
 #### Option 3: Install via Cargo (Requires Rust)
 

@@ -1,34 +1,36 @@
 # Creating Releases with Files
 
-This guide shows you how to create a GitHub release with all the necessary files automatically built and attached.
+This guide shows you how to create a GitHub release with all the necessary files.
 
-## Quick Start (Automatic)
+## Quick Start
 
-The easiest way is to push a version tag - GitHub Actions will do everything:
+The release process involves building locally, then using GitHub Actions to create the release:
 
 ```bash
 # 1. Update version in Cargo.toml (if needed)
 vim Cargo.toml  # Change version = "0.1.0" to your new version
 
-# 2. Commit the version change
-git add Cargo.toml
-git commit -m "Bump version to 0.1.0"
+# 2. Build installers for all platforms locally
+./scripts/build-installer.sh all
+
+# 3. Commit the built files
+git add releases/
+git commit -m "Add release files for v0.1.0"
 git push
 
-# 3. Create and push a version tag
+# 4. Create and push a version tag
 git tag -a v0.1.0 -m "Release v0.1.0"
 git push origin v0.1.0
 ```
 
-**That's it!** The workflow will:
-- ✅ Build binaries for all platforms (Linux, macOS, Windows)
+**The workflow will:**
+- ✅ Create a GitHub release from the tag
 - ✅ Extract release notes from CHANGELOG.md
-- ✅ Create a GitHub release
-- ✅ Attach all binary files to the release
+- ✅ Upload files from `releases/v{VERSION}/` to the release
 
-## Method 2: Manual Trigger
+## Manual Upload (After Building Locally)
 
-If you want to trigger a release manually:
+If you've already built the files and pushed them, you can upload them manually:
 
 1. **Go to GitHub Actions:**
    - Navigate to your repository
@@ -37,28 +39,32 @@ If you want to trigger a release manually:
 
 2. **Run the workflow:**
    - Click **"Run workflow"** button (top right)
-   - Optionally enter a version (e.g., `0.1.0`)
+   - Enter the version (e.g., `0.1.0`)
    - Click **"Run workflow"**
 
 3. **Wait for completion:**
-   - The workflow will build binaries
-   - Create the release
-   - Attach all files
+   - The workflow will find files in `releases/v{VERSION}/`
+   - Upload them to the release
 
 ## What Files Are Included?
 
-Each release automatically includes:
+Each release includes versioned files in `releases/v{VERSION}/`:
 
 ### macOS
-- `lpm-macos-aarch64.pkg` (Apple Silicon)
-- `lpm-macos-x86_64.pkg` (Intel)
+- `lpm-v{VERSION}-macos-aarch64.pkg` (Apple Silicon)
+- `lpm-v{VERSION}-macos-x86_64.pkg` (Intel)
 
 ### Linux
-- `lpm-linux-x86_64.tar.gz` (64-bit)
-- `lpm-linux-aarch64.tar.gz` (ARM64)
+- `lpm-v{VERSION}-linux-x86_64.tar.gz` (64-bit)
+- `lpm-v{VERSION}-linux-aarch64.tar.gz` (ARM64)
 
 ### Windows
-- `lpm-windows-x86_64.zip` (64-bit)
+- `lpm-v{VERSION}-windows-x86_64.zip` (64-bit)
+
+**Example for v0.1.0:**
+- `releases/v0.1.0/lpm-v0.1.0-macos-aarch64.pkg`
+- `releases/v0.1.0/lpm-v0.1.0-linux-x86_64.tar.gz`
+- etc.
 
 ## Release Notes
 
@@ -101,16 +107,19 @@ vim Cargo.toml               # Update version number
 # 3. Update changelog
 vim CHANGELOG.md             # Add release notes
 
-# 4. Commit changes
-git add Cargo.toml CHANGELOG.md
+# 4. Build installers locally
+./scripts/build-installer.sh all
+
+# 5. Commit changes and built files
+git add Cargo.toml CHANGELOG.md releases/
 git commit -m "Prepare release v0.1.0"
 git push
 
-# 5. Create and push tag
+# 6. Create and push tag
 git tag -a v0.1.0 -m "Release v0.1.0"
 git push origin v0.1.0
 
-# 6. Monitor the workflow
+# 7. Monitor the workflow
 # Go to Actions tab and watch the release workflow run
 ```
 
@@ -142,9 +151,10 @@ After the workflow completes:
 
 ### Files missing?
 
-- Check the build logs in Actions
-- Verify all platforms built successfully
-- Look for errors in the "Build Installers" step
+- Verify you built the files locally: `./scripts/build-installer.sh all`
+- Check that files exist in `releases/v{VERSION}/`
+- Ensure you committed and pushed the `releases/` directory
+- Check the workflow logs for upload errors
 
 ### Wrong version?
 
@@ -160,21 +170,21 @@ After the workflow completes:
 
 ## Manual Release (Fallback)
 
-If GitHub Actions fails, you can build and upload manually:
+If GitHub Actions fails, you can create the release manually:
 
 ```bash
 # 1. Build all installers locally
 ./scripts/build-installer.sh all
 
-# 2. Files will be in .output/ directory
-ls .output/
+# 2. Files will be in releases/v{VERSION}/ directory
+ls releases/v0.1.0/
 
 # 3. Create release on GitHub
 # - Go to Releases → Draft a new release
 # - Tag: v0.1.0
 # - Title: Release v0.1.0
 # - Description: Copy from CHANGELOG.md
-# - Attach files: Upload all files from .output/
+# - Attach files: Upload all files from releases/v0.1.0/
 # - Publish release
 ```
 
