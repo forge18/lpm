@@ -81,86 +81,129 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: rustup component add llvm-tools
 
-      - name: Build binary
+      - name: Build binary (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
         run: |
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            cargo xwin build --release --target ${{ matrix.target }}
-          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
-            export SDKROOT
-            export RUSTFLAGS="-C link-arg=-F${SDKROOT}/System/Library/Frameworks"
-            cargo zigbuild --release --target ${{ matrix.target }}
-          else
-            cargo zigbuild --release --target ${{ matrix.target }}
+          cargo xwin build --release --target ${{ matrix.target }}
+          if (-not (Test-Path "target/${{ matrix.target }}/release/lpm.exe")) {
+            Write-Host "Error: Binary not found"
+            exit 1
+          }
+
+      - name: Build binary (macOS)
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
+          export SDKROOT
+          export RUSTFLAGS="-C link-arg=-F${SDKROOT}/System/Library/Frameworks"
+          cargo zigbuild --release --target ${{ matrix.target }}
+          if [ ! -f "target/${{ matrix.target }}/release/lpm" ]; then
+            echo "Error: Binary not found"
+            exit 1
           fi
 
-      - name: Package binary
+      - name: Build binary (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          cargo zigbuild --release --target ${{ matrix.target }}
+          if [ ! -f "target/${{ matrix.target }}/release/lpm" ]; then
+            echo "Error: Binary not found"
+            exit 1
+          fi
+
+      - name: Package binary (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .output | Out-Null
+          $binary = "target/${{ matrix.target }}/release/lpm.exe"
+          $artifact = ".output/${{ matrix.artifact_name }}.${{ matrix.artifact_ext }}"
+          
+          New-Item -ItemType Directory -Force -Path lpm-release | Out-Null
+          Copy-Item $binary lpm-release/
+          
+          Compress-Archive -Path lpm-release/* -DestinationPath $artifact -Force
+          
+          Remove-Item -Recurse -Force lpm-release
+          
+          Write-Host "Created artifact: $artifact"
+          Get-ChildItem .output/
+
+      - name: Package binary (macOS)
+        if: matrix.os == 'macos-latest'
         shell: bash
         run: |
           mkdir -p .output
+          BINARY="target/${{ matrix.target }}/release/lpm"
+          ARTIFACT=".output/${{ matrix.artifact_name }}.${{ matrix.artifact_ext }}"
           
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            BINARY="target/${{ matrix.target }}/release/lpm.exe"
-            if [ ! -f "$BINARY" ]; then
-              echo "Error: Binary not found at $BINARY"
-              exit 1
-            fi
-            mkdir -p lpm-release
-            cp "$BINARY" lpm-release/
-            cd lpm-release
-            zip -q "../.output/${{ matrix.artifact_name }}.${{ matrix.artifact_ext }}" lpm.exe
-            cd ..
-            rm -rf lpm-release
-          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            BINARY="target/${{ matrix.target }}/release/lpm"
-            if [ ! -f "$BINARY" ]; then
-              echo "Error: Binary not found at $BINARY"
-              exit 1
-            fi
-            # Try to create .pkg, fallback to tar.gz
-            if command -v pkgbuild &> /dev/null; then
-              mkdir -p installer-payload/usr/local/bin
-              cp "$BINARY" installer-payload/usr/local/bin/
-              VERSION=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)
-              pkgbuild --root installer-payload \
+          # Try to create .pkg, fallback to tar.gz
+          if command -v pkgbuild &> /dev/null; then
+            mkdir -p installer-payload/usr/local/bin
+            cp "$BINARY" installer-payload/usr/local/bin/
+            VERSION=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)
+            if pkgbuild --root installer-payload \
                        --identifier com.lpm.installer \
                        --version "$VERSION" \
                        --install-location / \
-                       ".output/${{ matrix.artifact_name }}.${{ matrix.artifact_ext }}" || {
-                echo "pkgbuild failed, creating tar.gz instead"
-                mkdir -p lpm-release
-                cp "$BINARY" lpm-release/
-                tar czf ".output/${{ matrix.artifact_name }}.tar.gz" -C lpm-release lpm
-                rm -rf lpm-release
-              }
-              rm -rf installer-payload
+                       "$ARTIFACT"; then
+              echo "✓ Created $ARTIFACT"
             else
-              echo "pkgbuild not available, creating tar.gz"
+              echo "pkgbuild failed, creating tar.gz instead"
               mkdir -p lpm-release
               cp "$BINARY" lpm-release/
               tar czf ".output/${{ matrix.artifact_name }}.tar.gz" -C lpm-release lpm
               rm -rf lpm-release
             fi
+            rm -rf installer-payload
           else
-            BINARY="target/${{ matrix.target }}/release/lpm"
-            if [ ! -f "$BINARY" ]; then
-              echo "Error: Binary not found at $BINARY"
-              exit 1
-            fi
+            echo "pkgbuild not available, creating tar.gz"
             mkdir -p lpm-release
             cp "$BINARY" lpm-release/
-            tar czf ".output/${{ matrix.artifact_name }}.${{ matrix.artifact_ext }}" -C lpm-release lpm
+            tar czf ".output/${{ matrix.artifact_name }}.tar.gz" -C lpm-release lpm
             rm -rf lpm-release
           fi
           
-          echo "Created artifact: .output/${{ matrix.artifact_name }}.${{ matrix.artifact_ext }}"
+          echo "Created artifact: $ARTIFACT"
           ls -lh .output/
+
+      - name: Package binary (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          mkdir -p .output
+          BINARY="target/${{ matrix.target }}/release/lpm"
+          ARTIFACT=".output/${{ matrix.artifact_name }}.${{ matrix.artifact_ext }}"
+          
+          mkdir -p lpm-release
+          cp "$BINARY" lpm-release/
+          tar czf "$ARTIFACT" -C lpm-release lpm
+          rm -rf lpm-release
+          
+          echo "Created artifact: $ARTIFACT"
+          ls -lh .output/
+
+      - name: List artifacts before upload
+        if: always()
+        shell: bash
+        run: |
+          echo "Artifacts in .output/:"
+          ls -lah .output/ || echo "No .output directory"
+          echo ""
+          echo "Looking for: ${{ matrix.artifact_name }}.*"
+          find .output -name "${{ matrix.artifact_name }}.*" || echo "No matching files found"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: .output/${{ matrix.artifact_name }}.*
+          path: |
+            .output/${{ matrix.artifact_name }}.tar.gz
+            .output/${{ matrix.artifact_name }}.zip
+            .output/${{ matrix.artifact_name }}.pkg
           if-no-files-found: error
 
   release:
