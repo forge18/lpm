@@ -1,6 +1,6 @@
 # LPM - Lua Package Manager
 
-**Local package management for Lua. Because global installs are legacy.**
+**Local, project-scoped package management for Lua.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
