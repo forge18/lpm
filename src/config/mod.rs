@@ -1,5 +1,5 @@
-use crate::core::{LpmError, LpmResult};
 use crate::core::path::{config_file, ensure_dir};
+use crate::core::{LpmError, LpmResult};
 use serde::{Deserialize, Serialize};
 use std::fs;
 
@@ -10,7 +10,7 @@ pub struct Config {
     pub luarocks_manifest_url: String,
 
     /// Cache directory (defaults to platform-specific cache directory)
-    /// 
+    ///
     /// Default locations:
     /// - Windows: %LOCALAPPDATA%\lpm\cache
     /// - Linux: ~/.cache/lpm
@@ -59,7 +59,7 @@ impl Default for Config {
 
 impl Config {
     /// Load config from platform-specific config directory, creating default if it doesn't exist
-    /// 
+    ///
     /// Config locations:
     /// - Windows: %APPDATA%\lpm\config.yaml
     /// - Linux: ~/.config/lpm/config.yaml
@@ -82,7 +82,7 @@ impl Config {
     }
 
     /// Save config to platform-specific config directory
-    /// 
+    ///
     /// Config locations:
     /// - Windows: %APPDATA%\lpm\config.yaml
     /// - Linux: ~/.config/lpm/config.yaml

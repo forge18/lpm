@@ -48,14 +48,8 @@ impl Version {
         let major = parts[0]
             .parse()
             .map_err(|_| LpmError::Version(format!("Invalid major version: {}", s)))?;
-        let minor = parts
-            .get(1)
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
-        let patch = parts
-            .get(2)
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
+        let minor = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+        let patch = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
 
         Ok(Self {
             major,
@@ -69,16 +63,18 @@ impl Version {
         match constraint {
             VersionConstraint::Exact(v) => self == v,
             VersionConstraint::Compatible(v) => {
-                self >= v && self.major == v.major && (self.major, self.minor, self.patch) < (v.major + 1, 0, 0)
+                self >= v
+                    && self.major == v.major
+                    && (self.major, self.minor, self.patch) < (v.major + 1, 0, 0)
             }
             VersionConstraint::Patch(v) => {
-                self >= v && (self.major, self.minor) == (v.major, v.minor) && (self.major, self.minor, self.patch) < (v.major, v.minor + 1, 0)
+                self >= v
+                    && (self.major, self.minor) == (v.major, v.minor)
+                    && (self.major, self.minor, self.patch) < (v.major, v.minor + 1, 0)
             }
             VersionConstraint::GreaterOrEqual(v) => self >= v,
             VersionConstraint::LessThan(v) => self < v,
-            VersionConstraint::AnyPatch(v) => {
-                self.major == v.major && self.minor == v.minor
-            }
+            VersionConstraint::AnyPatch(v) => self.major == v.major && self.minor == v.minor,
         }
     }
 }
@@ -174,4 +170,3 @@ mod tests {
         ));
     }
 }
-

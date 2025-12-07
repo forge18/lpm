@@ -38,10 +38,10 @@ impl Workspace {
     pub fn load(workspace_root: &Path) -> LpmResult<Self> {
         // Check for workspace.yaml or package.yaml with workspace config
         let config = Self::load_config(workspace_root)?;
-        
+
         // Find all packages in the workspace
         let packages = Self::find_packages(workspace_root, &config)?;
-        
+
         Ok(Self {
             root: workspace_root.to_path_buf(),
             config,
@@ -78,8 +78,8 @@ impl Workspace {
 
     /// Load workspace.yaml
     fn load_workspace_yaml(path: &Path) -> LpmResult<WorkspaceConfig> {
-        use std::fs;
         use serde::Deserialize;
+        use std::fs;
 
         #[derive(Deserialize)]
         struct WorkspaceYaml {
@@ -99,8 +99,8 @@ impl Workspace {
 
     /// Load workspace config from package.yaml
     fn load_from_package_yaml(path: &Path) -> LpmResult<WorkspaceConfig> {
-        use std::fs;
         use serde::Deserialize;
+        use std::fs;
 
         #[derive(Deserialize)]
         struct PackageYamlWithWorkspace {
@@ -123,7 +123,9 @@ impl Workspace {
                 packages: workspace.packages,
             })
         } else {
-            Err(LpmError::Package("No workspace section in package.yaml".to_string()))
+            Err(LpmError::Package(
+                "No workspace section in package.yaml".to_string(),
+            ))
         }
     }
 
@@ -223,7 +225,7 @@ impl Workspace {
     }
 
     /// Get shared dependencies across all workspace packages
-    /// 
+    ///
     /// Returns a map of package name to version constraint, where the same
     /// package appears in multiple workspace packages with potentially different constraints.
     pub fn shared_dependencies(&self) -> HashMap<String, Vec<(String, String)>> {
@@ -272,8 +274,8 @@ impl Default for WorkspaceConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_workspace_config_default() {
@@ -302,4 +304,3 @@ packages:
         assert_eq!(config.packages.len(), 2);
     }
 }
-

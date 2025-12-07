@@ -103,4 +103,3 @@ mod tests {
         assert_eq!(macos.module_extension(), ".dylib");
     }
 }
-

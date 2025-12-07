@@ -35,10 +35,10 @@ impl DependencyResolver {
     /// Resolve all dependencies starting from entry point
     pub fn resolve(&mut self, entry: &Path) -> LpmResult<HashMap<String, PathBuf>> {
         let mut modules = HashMap::new();
-        
+
         let entry_module = self.path_to_module_name(entry)?;
         self.resolve_recursive(&entry_module, entry, &mut modules)?;
-        
+
         Ok(modules)
     }
 
@@ -68,7 +68,7 @@ impl DependencyResolver {
         // Parse file for require() statements using proper Lua parser
         let content = fs::read_to_string(module_path)?;
         let requires = self.parser.extract_requires(&content)?;
-        
+
         // Also check for dynamic requires (require(variable))
         // This is a simplified check - full implementation would need AST analysis
         if content.contains("require(") {
@@ -84,7 +84,10 @@ impl DependencyResolver {
                 self.resolve_recursive(&dep_module, &dep_path, modules)?;
             } else {
                 // Warn about missing modules (might be C modules or stdlib)
-                eprintln!("⚠️  Warning: Module '{}' not found (may be C module or stdlib)", req);
+                eprintln!(
+                    "⚠️  Warning: Module '{}' not found (may be C module or stdlib)",
+                    req
+                );
             }
         }
 
@@ -108,7 +111,7 @@ impl DependencyResolver {
             } else {
                 self.root.join(base_path)
             };
-            
+
             for variant in &path_variants {
                 let full_path = full_base.join(variant);
                 if full_path.exists() {
@@ -136,27 +139,27 @@ impl DependencyResolver {
     fn path_to_module_name(&self, path: &Path) -> LpmResult<String> {
         // Handle absolute paths
         let rel_path = if path.is_absolute() {
-            path.strip_prefix(&self.root)
-                .map_err(|_| LpmError::Path(format!(
+            path.strip_prefix(&self.root).map_err(|_| {
+                LpmError::Path(format!(
                     "Path {} is not within project root {}",
                     path.display(),
                     self.root.display()
-                )))?
+                ))
+            })?
         } else {
             path
         };
-        
+
         let mut module_name = rel_path
             .to_string_lossy()
             .replace(".lua", "")
             .replace("\\", "/"); // Normalize to forward slashes
-        
+
         // Remove leading slash if present
         if module_name.starts_with('/') {
             module_name = module_name[1..].to_string();
         }
-        
+
         Ok(module_name.replace("/", "."))
     }
 }
-

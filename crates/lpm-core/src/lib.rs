@@ -8,7 +8,6 @@ pub mod path_setup;
 pub mod package;
 
 // Re-export commonly used types
-pub use core::{LpmError, LpmResult, CredentialStore, ErrorHelp, format_error_with_help};
-pub use path_setup::{LuaRunner, RunOptions, PathSetup};
+pub use core::{format_error_with_help, CredentialStore, ErrorHelp, LpmError, LpmResult};
 pub use package::manifest::PackageManifest;
-
+pub use path_setup::{LuaRunner, PathSetup, RunOptions};

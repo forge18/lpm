@@ -40,4 +40,3 @@ pub enum LpmError {
     #[error("WalkDir error: {0}")]
     WalkDir(#[from] walkdir::Error),
 }
-

@@ -1,7 +1,7 @@
 use lpm::cache::Cache;
 use lpm::config::Config;
-use lpm::core::{LpmError, LpmResult};
 use lpm::core::path::find_project_root;
+use lpm::core::{LpmError, LpmResult};
 use lpm::package::lockfile::Lockfile;
 use lpm::package::verifier::PackageVerifier;
 use std::env;
@@ -13,12 +13,11 @@ pub fn run() -> LpmResult<()> {
     let project_root = find_project_root(&current_dir)?;
 
     // Load lockfile
-    let lockfile = Lockfile::load(&project_root)?
-        .ok_or_else(|| {
-            LpmError::Package(
-                "No package.lock found. Run 'lpm install' first to generate a lockfile.".to_string(),
-            )
-        })?;
+    let lockfile = Lockfile::load(&project_root)?.ok_or_else(|| {
+        LpmError::Package(
+            "No package.lock found. Run 'lpm install' first to generate a lockfile.".to_string(),
+        )
+    })?;
 
     if lockfile.packages.is_empty() {
         println!("No packages to verify");
@@ -50,9 +49,10 @@ pub fn run() -> LpmResult<()> {
             println!("  ❌ {}: {}", package, error);
         }
 
-        return Err(LpmError::Package(
-            format!("Verification failed for {} package(s)", result.failed.len()),
-        ));
+        return Err(LpmError::Package(format!(
+            "Verification failed for {} package(s)",
+            result.failed.len()
+        )));
     }
 
     Ok(())

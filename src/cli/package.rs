@@ -1,6 +1,6 @@
 use lpm::build::targets::Target;
-use lpm::core::{LpmError, LpmResult};
 use lpm::core::path::find_project_root;
+use lpm::core::{LpmError, LpmResult};
 use lpm::package::manifest::PackageManifest;
 use lpm::package::packager::BinaryPackager;
 use std::env;
@@ -31,7 +31,7 @@ pub fn run(target: Option<String>) -> LpmResult<()> {
         // Package for all targets
         eprintln!("Packaging for all supported targets...");
         let results = packager.package_all_targets()?;
-        
+
         eprintln!("\n✓ Packaging complete for {} target(s):", results.len());
         for (target, path) in &results {
             eprintln!("  {} -> {}", target.triple, path.display());
@@ -40,4 +40,3 @@ pub fn run(target: Option<String>) -> LpmResult<()> {
 
     Ok(())
 }
-

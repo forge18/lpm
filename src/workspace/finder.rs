@@ -7,7 +7,7 @@ pub struct WorkspaceFinder;
 
 impl WorkspaceFinder {
     /// Find workspace root by walking up the directory tree
-    /// 
+    ///
     /// Looks for workspace.yaml or package.yaml with workspace configuration
     pub fn find_workspace_root(start_dir: &Path) -> LpmResult<Option<PathBuf>> {
         let mut current = start_dir.to_path_buf();
@@ -54,18 +54,15 @@ impl WorkspaceFinder {
 
     /// Check if a directory is within a workspace
     pub fn is_in_workspace(dir: &Path) -> bool {
-        Self::find_workspace_root(dir)
-            .ok()
-            .flatten()
-            .is_some()
+        Self::find_workspace_root(dir).ok().flatten().is_some()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_find_workspace_root() {
@@ -80,4 +77,3 @@ mod tests {
         assert_eq!(root, Some(temp.path().to_path_buf()));
     }
 }
-

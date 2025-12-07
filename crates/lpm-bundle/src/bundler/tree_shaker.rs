@@ -12,7 +12,7 @@ impl TreeShaker {
     }
 
     /// Remove unused exports from modules
-    /// 
+    ///
     /// This is a basic implementation. A full tree-shaker would:
     /// - Track all used symbols across the entire bundle
     /// - Remove unused function definitions
@@ -24,7 +24,7 @@ impl TreeShaker {
         entry_module: &str,
     ) -> LpmResult<HashMap<String, String>> {
         let mut processed_modules = HashMap::new();
-        
+
         // Start from entry point and process the module.
         // Full recursive symbol tracking is not yet implemented - this is a basic implementation
         // that processes only the entry module.
@@ -32,8 +32,7 @@ impl TreeShaker {
             let content = fs::read_to_string(entry_path)?;
             processed_modules.insert(entry_module.to_string(), content);
         }
-        
+
         Ok(processed_modules)
     }
 }
-

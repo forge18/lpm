@@ -4,9 +4,9 @@ use std::io::{self, Write};
 /// Prompt the user for confirmation
 pub fn confirm(prompt: &str) -> LpmResult<bool> {
     print!("{} (y/N): ", prompt);
-    io::stdout().flush().map_err(|e| {
-        LpmError::Package(format!("Failed to write to stdout: {}", e))
-    })?;
+    io::stdout()
+        .flush()
+        .map_err(|e| LpmError::Package(format!("Failed to write to stdout: {}", e)))?;
 
     let mut input = String::new();
     io::stdin()
@@ -21,9 +21,9 @@ pub fn confirm(prompt: &str) -> LpmResult<bool> {
 pub fn confirm_with_default(prompt: &str, default: bool) -> LpmResult<bool> {
     let default_str = if default { "Y/n" } else { "y/N" };
     print!("{} ({}): ", prompt, default_str);
-    io::stdout().flush().map_err(|e| {
-        LpmError::Package(format!("Failed to write to stdout: {}", e))
-    })?;
+    io::stdout()
+        .flush()
+        .map_err(|e| LpmError::Package(format!("Failed to write to stdout: {}", e)))?;
 
     let mut input = String::new();
     io::stdin()
@@ -31,7 +31,7 @@ pub fn confirm_with_default(prompt: &str, default: bool) -> LpmResult<bool> {
         .map_err(|e| LpmError::Package(format!("Failed to read from stdin: {}", e)))?;
 
     let trimmed = input.trim().to_lowercase();
-    
+
     if trimmed.is_empty() {
         Ok(default)
     } else {
@@ -48,9 +48,9 @@ pub fn choose(prompt: &str, options: &[&str], default: usize) -> LpmResult<usize
     }
 
     print!("Choose (1-{}, default {}): ", options.len(), default + 1);
-    io::stdout().flush().map_err(|e| {
-        LpmError::Package(format!("Failed to write to stdout: {}", e))
-    })?;
+    io::stdout()
+        .flush()
+        .map_err(|e| LpmError::Package(format!("Failed to write to stdout: {}", e)))?;
 
     let mut input = String::new();
     io::stdin()
@@ -58,7 +58,7 @@ pub fn choose(prompt: &str, options: &[&str], default: usize) -> LpmResult<usize
         .map_err(|e| LpmError::Package(format!("Failed to read from stdin: {}", e)))?;
 
     let trimmed = input.trim();
-    
+
     if trimmed.is_empty() {
         Ok(default)
     } else {
@@ -84,4 +84,3 @@ mod tests {
         let _ = confirm;
     }
 }
-

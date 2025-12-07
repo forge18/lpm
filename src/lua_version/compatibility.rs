@@ -23,10 +23,7 @@ impl PackageCompatibility {
     }
 
     /// Check if a rockspec is compatible with the installed Lua version
-    pub fn check_rockspec(
-        installed_version: &LuaVersion,
-        rockspec: &Rockspec,
-    ) -> LpmResult<bool> {
+    pub fn check_rockspec(installed_version: &LuaVersion, rockspec: &Rockspec) -> LpmResult<bool> {
         Self::check_package(installed_version, rockspec.lua_version.as_deref())
     }
 
@@ -40,8 +37,7 @@ impl PackageCompatibility {
         if !constraint.matches(installed_version) {
             return Err(LpmError::Version(format!(
                 "Installed Lua version {} does not satisfy project requirement '{}'",
-                installed_version,
-                project_constraint
+                installed_version, project_constraint
             )));
         }
 
@@ -87,7 +83,8 @@ mod tests {
     #[test]
     fn test_check_package_multiple() {
         let installed = LuaVersion::new(5, 3, 0);
-        assert!(PackageCompatibility::check_package(&installed, Some("5.1 || 5.3 || 5.4")).unwrap());
+        assert!(
+            PackageCompatibility::check_package(&installed, Some("5.1 || 5.3 || 5.4")).unwrap()
+        );
     }
 }
-

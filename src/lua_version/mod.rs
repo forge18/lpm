@@ -1,8 +1,7 @@
-pub mod detector;
-pub mod constraint;
 pub mod compatibility;
+pub mod constraint;
+pub mod detector;
 
-pub use detector::{LuaVersionDetector, LuaVersion};
-pub use constraint::{LuaVersionConstraint, parse_lua_version_constraint};
 pub use compatibility::PackageCompatibility;
-
+pub use constraint::{parse_lua_version_constraint, LuaVersionConstraint};
+pub use detector::{LuaVersion, LuaVersionDetector};

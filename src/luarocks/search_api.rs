@@ -1,5 +1,5 @@
-use crate::core::{LpmError, LpmResult};
 use crate::core::version::Version;
+use crate::core::{LpmError, LpmResult};
 use crate::luarocks::manifest::Manifest;
 use reqwest::Client;
 
@@ -42,18 +42,15 @@ impl SearchAPI {
             )));
         }
 
-        let content = response
-            .text()
-            .await
-            .map_err(LpmError::Http)?;
+        let content = response.text().await.map_err(LpmError::Http)?;
 
         // Parse manifest
         let manifest = Manifest::parse_json(&content)?;
 
         // Get all versions for this package
-        let versions = manifest
-            .get_package_versions(package_name)
-            .ok_or_else(|| LpmError::Package(format!("Package '{}' not found in manifest", package_name)))?;
+        let versions = manifest.get_package_versions(package_name).ok_or_else(|| {
+            LpmError::Package(format!("Package '{}' not found in manifest", package_name))
+        })?;
 
         // Find latest version by parsing and comparing
         let latest = versions
@@ -62,17 +59,27 @@ impl SearchAPI {
                 // Parse version string (handles LuaRocks format like "3.0-1")
                 Version::parse(&pv.version).unwrap_or_else(|_| Version::new(0, 0, 0))
             })
-            .ok_or_else(|| LpmError::Package(format!("No versions found for package '{}'", package_name)))?;
+            .ok_or_else(|| {
+                LpmError::Package(format!("No versions found for package '{}'", package_name))
+            })?;
 
         Ok(latest.version.clone())
     }
 
     /// Construct rockspec URL using LuaRocks standard format
     /// Format: https://luarocks.org/manifests/{manifest}/{package}-{version}.rockspec
-    pub fn get_rockspec_url(&self, package_name: &str, version: &str, manifest: Option<&str>) -> String {
+    pub fn get_rockspec_url(
+        &self,
+        package_name: &str,
+        version: &str,
+        manifest: Option<&str>,
+    ) -> String {
         let manifest_name = manifest.unwrap_or("luarocks");
         let rockspec_name = format!("{}-{}.rockspec", package_name, version);
-        format!("{}/manifests/{}/{}", self.base_url, manifest_name, rockspec_name)
+        format!(
+            "{}/manifests/{}/{}",
+            self.base_url, manifest_name, rockspec_name
+        )
     }
 
     /// Verify a rockspec URL exists
@@ -105,14 +112,19 @@ mod tests {
     fn test_get_rockspec_url() {
         let api = SearchAPI::new();
         let url = api.get_rockspec_url("test-package", "1.0.0", None);
-        assert_eq!(url, "https://luarocks.org/manifests/luarocks/test-package-1.0.0.rockspec");
+        assert_eq!(
+            url,
+            "https://luarocks.org/manifests/luarocks/test-package-1.0.0.rockspec"
+        );
     }
 
     #[test]
     fn test_get_rockspec_url_with_manifest() {
         let api = SearchAPI::new();
         let url = api.get_rockspec_url("test-package", "1.0.0", Some("custom"));
-        assert_eq!(url, "https://luarocks.org/manifests/custom/test-package-1.0.0.rockspec");
+        assert_eq!(
+            url,
+            "https://luarocks.org/manifests/custom/test-package-1.0.0.rockspec"
+        );
     }
 }
-

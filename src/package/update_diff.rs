@@ -13,20 +13,11 @@ pub enum PackageChange {
         new_version: Version,
     },
     /// Package will be newly installed
-    Added {
-        name: String,
-        version: Version,
-    },
+    Added { name: String, version: Version },
     /// Package will be removed
-    Removed {
-        name: String,
-        version: Version,
-    },
+    Removed { name: String, version: Version },
     /// Package is already up to date
-    UpToDate {
-        name: String,
-        version: Version,
-    },
+    UpToDate { name: String, version: Version },
 }
 
 /// Represents file changes for a package update
@@ -150,10 +141,7 @@ impl UpdateDiff {
     }
 
     /// Calculate file changes for packages that will be updated
-    pub fn calculate_file_changes(
-        &mut self,
-        project_root: &Path,
-    ) {
+    pub fn calculate_file_changes(&mut self, project_root: &Path) {
         use crate::core::path::lua_modules_dir;
         use std::fs;
 
@@ -174,21 +162,20 @@ impl UpdateDiff {
                     if let PackageChange::Updated { .. } = change {
                         if package_dir.exists() {
                             // Get list of current files
-                            let current_files: Vec<String> = if let Ok(entries) =
-                                fs::read_dir(&package_dir)
-                            {
-                                entries
-                                    .filter_map(|e| e.ok())
-                                    .filter_map(|e| {
-                                        e.path()
-                                            .strip_prefix(&package_dir)
-                                            .ok()
-                                            .and_then(|p| p.to_str().map(|s| s.to_string()))
-                                    })
-                                    .collect()
-                            } else {
-                                Vec::new()
-                            };
+                            let current_files: Vec<String> =
+                                if let Ok(entries) = fs::read_dir(&package_dir) {
+                                    entries
+                                        .filter_map(|e| e.ok())
+                                        .filter_map(|e| {
+                                            e.path()
+                                                .strip_prefix(&package_dir)
+                                                .ok()
+                                                .and_then(|p| p.to_str().map(|s| s.to_string()))
+                                        })
+                                        .collect()
+                                } else {
+                                    Vec::new()
+                                };
 
                             // For now, we'll mark all files as potentially modified
                             // In a full implementation, we'd compare checksums or file contents
@@ -330,7 +317,7 @@ impl Default for UpdateDiff {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::package::lockfile::{Lockfile, LockedPackage};
+    use crate::package::lockfile::{LockedPackage, Lockfile};
     use std::collections::HashMap;
 
     fn create_test_lockfile() -> Lockfile {
@@ -358,12 +345,8 @@ mod tests {
 
     #[test]
     fn test_update_diff_calculate_no_lockfile() {
-        let resolved = {
-            let mut map = HashMap::new();
-            map.insert("new-package".to_string(), Version::new(1, 0, 0));
-            map
-        };
-        
+        let resolved = HashMap::from([("new-package".to_string(), Version::new(1, 0, 0))]);
+
         let diff = UpdateDiff::calculate(&None, &resolved, &HashMap::new());
         assert_eq!(diff.package_changes.len(), 1);
         match &diff.package_changes[0] {
@@ -378,9 +361,8 @@ mod tests {
     #[test]
     fn test_update_diff_calculate_up_to_date() {
         let lockfile = create_test_lockfile();
-        let mut resolved = HashMap::new();
-        resolved.insert("test-package".to_string(), Version::new(1, 0, 0));
-        
+        let resolved = HashMap::from([("test-package".to_string(), Version::new(1, 0, 0))]);
+
         let diff = UpdateDiff::calculate(&Some(lockfile), &resolved, &HashMap::new());
         assert_eq!(diff.package_changes.len(), 1);
         match &diff.package_changes[0] {
@@ -397,11 +379,15 @@ mod tests {
         let lockfile = create_test_lockfile();
         let mut resolved = HashMap::new();
         resolved.insert("test-package".to_string(), Version::new(2, 0, 0));
-        
+
         let diff = UpdateDiff::calculate(&Some(lockfile), &resolved, &HashMap::new());
         assert_eq!(diff.package_changes.len(), 1);
         match &diff.package_changes[0] {
-            PackageChange::Updated { name, current_version, new_version } => {
+            PackageChange::Updated {
+                name,
+                current_version,
+                new_version,
+            } => {
                 assert_eq!(name, "test-package");
                 assert_eq!(current_version, &Version::new(1, 0, 0));
                 assert_eq!(new_version, &Version::new(2, 0, 0));
@@ -414,7 +400,7 @@ mod tests {
     fn test_update_diff_calculate_removed() {
         let lockfile = create_test_lockfile();
         let resolved = HashMap::new();
-        
+
         let diff = UpdateDiff::calculate(&Some(lockfile), &resolved, &HashMap::new());
         assert_eq!(diff.package_changes.len(), 1);
         match &diff.package_changes[0] {
@@ -430,13 +416,13 @@ mod tests {
     fn test_update_diff_has_changes() {
         let mut diff = UpdateDiff::new();
         assert!(!diff.has_changes());
-        
+
         diff.package_changes.push(PackageChange::UpToDate {
             name: "test".to_string(),
             version: Version::new(1, 0, 0),
         });
         assert!(!diff.has_changes());
-        
+
         diff.package_changes.push(PackageChange::Updated {
             name: "test".to_string(),
             current_version: Version::new(1, 0, 0),
@@ -448,12 +434,10 @@ mod tests {
     #[test]
     fn test_update_diff_with_dev_dependencies() {
         let lockfile = create_test_lockfile();
-        let mut resolved = HashMap::new();
-        let mut resolved_dev = HashMap::new();
-        resolved_dev.insert("dev-package".to_string(), Version::new(1, 0, 0));
-        
+        let resolved = HashMap::new();
+        let resolved_dev = HashMap::from([("dev-package".to_string(), Version::new(1, 0, 0))]);
+
         let diff = UpdateDiff::calculate(&Some(lockfile), &resolved, &resolved_dev);
         assert_eq!(diff.package_changes.len(), 2); // removed test-package + added dev-package
     }
 }
-

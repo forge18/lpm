@@ -1,10 +1,10 @@
+use futures_util::{SinkExt, StreamExt};
 use lpm_core::{LpmError, LpmResult};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
-use futures_util::{SinkExt, StreamExt};
-use tokio::net::TcpListener;
 
 /// WebSocket server for browser reload
 pub struct WebSocketServer {
@@ -26,7 +26,8 @@ impl WebSocketServer {
     /// Start the WebSocket server
     pub async fn start(&self) -> LpmResult<()> {
         let addr = format!("127.0.0.1:{}", self.port);
-        let listener = TcpListener::bind(&addr).await
+        let listener = TcpListener::bind(&addr)
+            .await
             .map_err(|e| LpmError::Package(format!("Failed to bind WebSocket server: {}", e)))?;
 
         println!("🌐 WebSocket server listening on ws://{}", addr);
@@ -52,7 +53,7 @@ impl WebSocketServer {
                         break;
                     }
                 }
-                
+
                 if should_stop.load(Ordering::SeqCst) {
                     break;
                 }
@@ -85,7 +86,9 @@ async fn handle_client(stream: tokio::net::TcpStream, mut reload_rx: broadcast::
     let (mut write, mut read) = ws_stream.split();
 
     // Send initial connection message
-    let _ = write.send(Message::Text(r#"{"type":"connected"}"#.to_string())).await;
+    let _ = write
+        .send(Message::Text(r#"{"type":"connected"}"#.to_string()))
+        .await;
 
     loop {
         tokio::select! {
@@ -111,4 +114,3 @@ async fn handle_client(stream: tokio::net::TcpStream, mut reload_rx: broadcast::
         }
     }
 }
-

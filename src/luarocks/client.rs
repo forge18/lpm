@@ -27,7 +27,7 @@ impl LuaRocksClient {
     pub async fn fetch_manifest(&self) -> LpmResult<Manifest> {
         // Check cache first
         let cache_path = self.cache.rockspecs_dir().join("manifest.json");
-        
+
         let content = if self.cache.exists(&cache_path) {
             // Use cached version
             String::from_utf8(self.cache.read(&cache_path)?)
@@ -36,23 +36,13 @@ impl LuaRocksClient {
             // Download manifest as JSON
             println!("Downloading LuaRocks manifest...");
             let url = format!("{}?format=json", self.manifest_url);
-            let response = self
-                .client
-                .get(&url)
-                .send()
-                .await
-                .map_err(LpmError::Http)?;
+            let response = self.client.get(&url).send().await.map_err(LpmError::Http)?;
 
             if !response.status().is_success() {
-                return Err(LpmError::Http(
-                    response.error_for_status().unwrap_err(),
-                ));
+                return Err(LpmError::Http(response.error_for_status().unwrap_err()));
             }
 
-            let content = response
-                .text()
-                .await
-                .map_err(LpmError::Http)?;
+            let content = response.text().await.map_err(LpmError::Http)?;
 
             // Cache it
             self.cache.write(&cache_path, content.as_bytes())?;
@@ -78,23 +68,13 @@ impl LuaRocksClient {
 
         // Download rockspec
         println!("Downloading rockspec: {}", url);
-        let response = self
-            .client
-            .get(url)
-            .send()
-            .await
-            .map_err(LpmError::Http)?;
+        let response = self.client.get(url).send().await.map_err(LpmError::Http)?;
 
         if !response.status().is_success() {
-            return Err(LpmError::Http(
-                response.error_for_status().unwrap_err(),
-            ));
+            return Err(LpmError::Http(response.error_for_status().unwrap_err()));
         }
 
-        let content = response
-            .text()
-            .await
-            .map_err(LpmError::Http)?;
+        let content = response.text().await.map_err(LpmError::Http)?;
 
         // Cache it
         self.cache.write(&cache_path, content.as_bytes())?;
@@ -118,23 +98,13 @@ impl LuaRocksClient {
 
         // Download source
         println!("Downloading source package: {}", url);
-        let response = self
-            .client
-            .get(url)
-            .send()
-            .await
-            .map_err(LpmError::Http)?;
+        let response = self.client.get(url).send().await.map_err(LpmError::Http)?;
 
         if !response.status().is_success() {
-            return Err(LpmError::Http(
-                response.error_for_status().unwrap_err(),
-            ));
+            return Err(LpmError::Http(response.error_for_status().unwrap_err()));
         }
 
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(LpmError::Http)?;
+        let bytes = response.bytes().await.map_err(LpmError::Http)?;
 
         // Cache it
         self.cache.write(&cache_path, &bytes)?;
@@ -211,4 +181,3 @@ mod tests {
         assert_eq!(version, "unknown");
     }
 }
-

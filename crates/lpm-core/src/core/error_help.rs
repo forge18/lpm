@@ -125,12 +125,12 @@ impl ErrorHelp for LpmError {
 /// Format an error with helpful suggestions
 pub fn format_error_with_help(error: &LpmError) -> String {
     let mut output = format!("❌ Error: {}", error);
-    
+
     if let Some(help) = error.help() {
         output.push_str("\n\n");
         output.push_str(&help);
     }
-    
+
     output
 }
 
@@ -152,4 +152,3 @@ mod tests {
         assert!(error.help().unwrap().contains("SemVer"));
     }
 }
-

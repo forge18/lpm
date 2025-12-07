@@ -1,6 +1,6 @@
 use super::metadata::TemplateMetadata;
-use lpm_core::{LpmError, LpmResult};
 use lpm_core::core::path::lpm_home;
+use lpm_core::{LpmError, LpmResult};
 use std::path::{Path, PathBuf};
 
 /// Discovers available templates from built-in and user locations
@@ -22,9 +22,10 @@ impl TemplateDiscovery {
                 // Check if we're in a development build (target/debug or target/release)
                 if exe_dir.to_string_lossy().contains("target") {
                     // Look for templates relative to workspace root
-                    if let Some(workspace_root) = exe_dir.ancestors().find(|p| {
-                        p.join("Cargo.toml").exists() && p.join("src").exists()
-                    }) {
+                    if let Some(workspace_root) = exe_dir
+                        .ancestors()
+                        .find(|p| p.join("Cargo.toml").exists() && p.join("src").exists())
+                    {
                         return workspace_root.join("src").join("templates");
                     }
                 }
@@ -41,7 +42,10 @@ impl TemplateDiscovery {
         // Check built-in templates
         let builtin_dir = Self::builtin_templates_dir();
         if builtin_dir.exists() {
-            templates.extend(Self::discover_in_dir(&builtin_dir, TemplateSource::Builtin)?);
+            templates.extend(Self::discover_in_dir(
+                &builtin_dir,
+                TemplateSource::Builtin,
+            )?);
         }
 
         // Check user templates
@@ -79,7 +83,11 @@ impl TemplateDiscovery {
                             });
                         }
                         Err(e) => {
-                            eprintln!("Warning: Failed to load template metadata from {}: {}", path.display(), e);
+                            eprintln!(
+                                "Warning: Failed to load template metadata from {}: {}",
+                                path.display(),
+                                e
+                            );
                         }
                     }
                 }
@@ -137,4 +145,3 @@ pub enum TemplateSource {
     Builtin,
     User,
 }
-

@@ -1,7 +1,7 @@
 //! Performance benchmarks for LPM
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use lpm::core::version::{Version, parse_constraint};
+use lpm::core::version::{parse_constraint, Version};
 use lpm::package::manifest::PackageManifest;
 
 fn benchmark_version_parsing(c: &mut Criterion) {
@@ -25,7 +25,7 @@ fn benchmark_version_constraint_parsing(c: &mut Criterion) {
 fn benchmark_version_satisfaction(c: &mut Criterion) {
     let version = Version::parse("1.2.3").unwrap();
     let constraint = parse_constraint("^1.2.0").unwrap();
-    
+
     c.bench_function("version_satisfies", |b| {
         b.iter(|| {
             version.satisfies(black_box(&constraint));
@@ -37,12 +37,11 @@ fn benchmark_manifest_serialization(c: &mut Criterion) {
     let mut manifest = PackageManifest::default("bench-package".to_string());
     manifest.version = "1.0.0".to_string();
     for i in 0..100 {
-        manifest.dependencies.insert(
-            format!("dep-{}", i),
-            format!("^{}.0.0", i % 10)
-        );
+        manifest
+            .dependencies
+            .insert(format!("dep-{}", i), format!("^{}.0.0", i % 10));
     }
-    
+
     c.bench_function("manifest_to_yaml", |b| {
         b.iter(|| {
             serde_yaml::to_string(black_box(&manifest)).unwrap();
@@ -54,13 +53,12 @@ fn benchmark_manifest_deserialization(c: &mut Criterion) {
     let mut manifest = PackageManifest::default("bench-package".to_string());
     manifest.version = "1.0.0".to_string();
     for i in 0..100 {
-        manifest.dependencies.insert(
-            format!("dep-{}", i),
-            format!("^{}.0.0", i % 10)
-        );
+        manifest
+            .dependencies
+            .insert(format!("dep-{}", i), format!("^{}.0.0", i % 10));
     }
     let yaml = serde_yaml::to_string(&manifest).unwrap();
-    
+
     c.bench_function("manifest_from_yaml", |b| {
         b.iter(|| {
             serde_yaml::from_str::<PackageManifest>(black_box(&yaml)).unwrap();
@@ -70,9 +68,13 @@ fn benchmark_manifest_deserialization(c: &mut Criterion) {
 
 fn benchmark_dependency_resolution(c: &mut Criterion) {
     let mut manifest = PackageManifest::default("test".to_string());
-    manifest.dependencies.insert("luasocket".to_string(), "^3.0.0".to_string());
-    manifest.dependencies.insert("penlight".to_string(), "^1.13.0".to_string());
-    
+    manifest
+        .dependencies
+        .insert("luasocket".to_string(), "^3.0.0".to_string());
+    manifest
+        .dependencies
+        .insert("penlight".to_string(), "^1.13.0".to_string());
+
     c.bench_function("resolve_dependencies", |b| {
         b.iter(|| {
             // Note: This requires network access and may be slow
@@ -93,4 +95,3 @@ criterion_group!(
     benchmark_dependency_resolution
 );
 criterion_main!(benches);
-

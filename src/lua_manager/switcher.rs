@@ -82,9 +82,7 @@ impl VersionSwitcher {
             ));
         }
 
-        let version = fs::read_to_string(&self.current_file)?
-            .trim()
-            .to_string();
+        let version = fs::read_to_string(&self.current_file)?.trim().to_string();
 
         if version.is_empty() {
             return Err(LpmError::Package(
@@ -150,8 +148,8 @@ impl VersionSwitcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_version_switcher_new() {
@@ -173,12 +171,12 @@ mod tests {
     fn test_version_switcher_list_installed_with_versions() {
         let temp = TempDir::new().unwrap();
         let switcher = VersionSwitcher::new(temp.path());
-        
+
         // Create a mock installation
         let version_dir = temp.path().join("versions").join("5.4.8");
         fs::create_dir_all(version_dir.join("bin")).unwrap();
         fs::write(version_dir.join("bin").join("lua"), "mock binary").unwrap();
-        
+
         let versions = switcher.list_installed().unwrap();
         assert_eq!(versions.len(), 1);
         assert_eq!(versions[0], "5.4.8");
@@ -196,13 +194,13 @@ mod tests {
     fn test_version_switcher_current_set() {
         let temp = TempDir::new().unwrap();
         let switcher = VersionSwitcher::new(temp.path());
-        
+
         // Create version directory and current file
         let version_dir = temp.path().join("versions").join("5.4.8");
         fs::create_dir_all(version_dir.join("bin")).unwrap();
         fs::write(version_dir.join("bin").join("lua"), "mock binary").unwrap();
         fs::write(temp.path().join("current"), "5.4.8\n").unwrap();
-        
+
         let current = switcher.current().unwrap();
         assert_eq!(current, "5.4.8");
     }
@@ -221,16 +219,15 @@ mod tests {
         let switcher = VersionSwitcher::new(temp.path());
         let project_dir = temp.path().join("project");
         fs::create_dir_all(&project_dir).unwrap();
-        
+
         // Create version directory
         let version_dir = temp.path().join("versions").join("5.4.8");
         fs::create_dir_all(version_dir.join("bin")).unwrap();
         fs::write(version_dir.join("bin").join("lua"), "mock binary").unwrap();
-        
+
         switcher.set_local("5.4.8", &project_dir).unwrap();
         assert!(project_dir.join(".lua-version").exists());
         let content = fs::read_to_string(project_dir.join(".lua-version")).unwrap();
         assert_eq!(content.trim(), "5.4.8");
     }
 }
-

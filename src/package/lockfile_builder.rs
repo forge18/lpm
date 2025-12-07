@@ -21,13 +21,13 @@ impl LockfileBuilder {
     }
 
     /// Generate a lockfile from a manifest
-    /// 
+    ///
     /// This implementation:
     /// 1. Resolves all dependencies (using resolver)
     /// 2. Fetches rockspecs to get source URLs
     /// 3. Calculates checksums from cached source files
     /// 4. Records checksums in package.lock
-    /// 
+    ///
     /// If `exclude_dev` is true, dev_dependencies are excluded (for production builds)
     pub async fn build_lockfile(
         &self,
@@ -41,7 +41,7 @@ impl LockfileBuilder {
         let config = Config::load()?;
         let client = LuaRocksClient::new(&config, self.cache.clone());
         let search_api = SearchAPI::new();
-        
+
         // Fetch manifest for resolver
         let luarocks_manifest = client.fetch_manifest().await?;
         let resolver = DependencyResolver::new(luarocks_manifest.clone());
@@ -55,26 +55,28 @@ impl LockfileBuilder {
         };
 
         // Use parallel downloads for better performance
-        use crate::package::downloader::{ParallelDownloader, DownloadTask};
+        use crate::package::downloader::{DownloadTask, ParallelDownloader};
         let parallel_downloader = ParallelDownloader::new(client, Some(10));
-        
+
         // Get source URLs from manifest for parallel downloads (already fetched above)
-        
+
         // Create download tasks for all packages
         let mut download_tasks = Vec::new();
         for (name, version) in &resolved_versions {
             let version_str = version.to_string();
             let rockspec_url = search_api.get_rockspec_url(name, &version_str, None);
-            
+
             // Try to get source URL from manifest
-            let source_url = luarocks_manifest.get_package_versions(name)
+            let source_url = luarocks_manifest
+                .get_package_versions(name)
                 .and_then(|versions| {
-                    versions.iter()
+                    versions
+                        .iter()
                         .find(|pv| pv.version == version_str)
                         .and_then(|pv| pv.archive_url.as_ref())
                         .cloned()
                 });
-            
+
             download_tasks.push(DownloadTask {
                 name: name.clone(),
                 version: version_str,
@@ -82,21 +84,24 @@ impl LockfileBuilder {
                 source_url,
             });
         }
-        
+
         if !exclude_dev {
             for (name, version) in &resolved_dev_versions {
                 let version_str = version.to_string();
                 let rockspec_url = search_api.get_rockspec_url(name, &version_str, None);
-                
+
                 // Try to get source URL from manifest
-                let source_url = luarocks_manifest.get_package_versions(name)
-                    .and_then(|versions| {
-                        versions.iter()
-                            .find(|pv| pv.version == version_str)
-                            .and_then(|pv| pv.archive_url.as_ref())
-                            .cloned()
-                    });
-                
+                let source_url =
+                    luarocks_manifest
+                        .get_package_versions(name)
+                        .and_then(|versions| {
+                            versions
+                                .iter()
+                                .find(|pv| pv.version == version_str)
+                                .and_then(|pv| pv.archive_url.as_ref())
+                                .cloned()
+                        });
+
                 download_tasks.push(DownloadTask {
                     name: name.clone(),
                     version: version_str,
@@ -105,39 +110,48 @@ impl LockfileBuilder {
                 });
             }
         }
-        
+
         // Download all packages in parallel
-        let download_results = parallel_downloader.download_packages(download_tasks, None).await;
-        
+        let download_results = parallel_downloader
+            .download_packages(download_tasks, None)
+            .await;
+
         // Build lockfile entries from download results
         for result in download_results {
             if let Some(error) = result.error {
                 return Err(error);
             }
-            
+
             // Calculate checksum from downloaded source
             let checksum = if let Some(ref source_path) = result.source_path {
                 Cache::checksum(source_path)?
             } else {
-                return Err(crate::core::LpmError::Package(
-                    format!("No source path for {}", result.name)
-                ));
+                return Err(crate::core::LpmError::Package(format!(
+                    "No source path for {}",
+                    result.name
+                )));
             };
-            
+
             // Get file size
-            let size = result.source_path.as_ref()
+            let size = result
+                .source_path
+                .as_ref()
                 .and_then(|p| std::fs::metadata(p).ok())
                 .map(|m| m.len());
-            
+
             // Parse dependencies from rockspec
             let mut dependencies = HashMap::new();
             for dep in &result.rockspec.dependencies {
                 // Skip lua runtime dependencies
-                if dep.trim().starts_with("lua") && 
-                   (dep.contains(">=") || dep.contains(">") || dep.contains("==") || dep.contains("~>")) {
+                if dep.trim().starts_with("lua")
+                    && (dep.contains(">=")
+                        || dep.contains(">")
+                        || dep.contains("==")
+                        || dep.contains("~>"))
+                {
                     continue;
                 }
-                
+
                 // Parse dependency string
                 if let Some(pos) = dep.find(char::is_whitespace) {
                     let dep_name = dep[..pos].trim().to_string();
@@ -147,7 +161,7 @@ impl LockfileBuilder {
                     dependencies.insert(dep.trim().to_string(), "*".to_string());
                 }
             }
-            
+
             let version = result.version.clone();
             let name = result.name.clone();
             let locked_package = crate::package::lockfile::LockedPackage {
@@ -160,7 +174,7 @@ impl LockfileBuilder {
                 dependencies,
                 build: None,
             };
-            
+
             lockfile.add_package(name, locked_package);
         }
 
@@ -187,19 +201,21 @@ impl LockfileBuilder {
         let checksum = Cache::checksum(&source_path)?;
 
         // Get file size
-        let size = std::fs::metadata(&source_path)
-            .ok()
-            .map(|m| m.len());
+        let size = std::fs::metadata(&source_path).ok().map(|m| m.len());
 
         // Parse dependencies from rockspec
         let mut dependencies = HashMap::new();
         for dep in &rockspec.dependencies {
             // Skip lua runtime dependencies
-            if dep.trim().starts_with("lua") && 
-               (dep.contains(">=") || dep.contains(">") || dep.contains("==") || dep.contains("~>")) {
+            if dep.trim().starts_with("lua")
+                && (dep.contains(">=")
+                    || dep.contains(">")
+                    || dep.contains("==")
+                    || dep.contains("~>"))
+            {
                 continue;
             }
-            
+
             // Parse dependency string
             if let Some(pos) = dep.find(char::is_whitespace) {
                 let dep_name = dep[..pos].trim().to_string();
@@ -231,12 +247,12 @@ impl LockfileBuilder {
         exclude_dev: bool,
     ) -> LpmResult<Lockfile> {
         let mut new_lockfile = Lockfile::new();
-        
+
         // Setup clients
         let config = Config::load()?;
         let client = LuaRocksClient::new(&config, self.cache.clone());
         let search_api = SearchAPI::new();
-        
+
         // Fetch manifest for resolver
         let luarocks_manifest = client.fetch_manifest().await?;
         let resolver = DependencyResolver::new(luarocks_manifest);
@@ -261,7 +277,7 @@ impl LockfileBuilder {
         // Check each dependency - reuse from existing lockfile if version unchanged
         for (name, resolved_version) in &all_dependencies {
             let version_str = resolved_version.to_string();
-            
+
             // Check if package exists in existing lockfile with same version
             if let Some(existing_pkg) = existing.get_package(name) {
                 if existing_pkg.version == version_str {
@@ -277,17 +293,14 @@ impl LockfileBuilder {
             if processed.contains(package_name) {
                 continue;
             }
-            
+
             let version_str = resolved_version.to_string();
-            
+
             // Build new lockfile entry
-            let locked_package = self.build_locked_package(
-                &client,
-                &search_api,
-                package_name,
-                &version_str,
-            ).await?;
-            
+            let locked_package = self
+                .build_locked_package(&client, &search_api, package_name, &version_str)
+                .await?;
+
             new_lockfile.add_package(package_name.clone(), locked_package);
             processed.insert(package_name.clone());
         }
@@ -295,4 +308,3 @@ impl LockfileBuilder {
         Ok(new_lockfile)
     }
 }
-

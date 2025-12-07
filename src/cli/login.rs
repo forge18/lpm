@@ -1,5 +1,5 @@
-use lpm::core::{LpmError, LpmResult};
 use lpm::core::credentials::CredentialStore;
+use lpm::core::{LpmError, LpmResult};
 use std::io::{self, Write};
 
 pub async fn run() -> LpmResult<()> {
@@ -40,4 +40,3 @@ pub async fn run() -> LpmResult<()> {
 
     Ok(())
 }
-

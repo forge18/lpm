@@ -1,7 +1,7 @@
+use crate::core::path::{ensure_dir, packages_metadata_dir};
 use crate::core::{LpmError, LpmResult};
 use crate::luarocks::rockspec::Rockspec;
 use crate::package::manifest::PackageManifest;
-use crate::core::path::{packages_metadata_dir, ensure_dir};
 use std::fs;
 use std::path::Path;
 
@@ -31,7 +31,7 @@ pub fn convert_rockspec_to_manifest(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::luarocks::rockspec::{Rockspec, RockspecBuild, RockspecSource, InstallTable};
+    use crate::luarocks::rockspec::{InstallTable, Rockspec, RockspecBuild, RockspecSource};
     use std::collections::HashMap;
     use tempfile::TempDir;
 
@@ -64,14 +64,15 @@ mod tests {
         };
 
         let manifest = convert_rockspec_to_manifest(&rockspec, temp.path(), "luasocket").unwrap();
-        
+
         assert_eq!(manifest.name, "luasocket");
         assert_eq!(manifest.version, "3.0-1");
         assert_eq!(manifest.dependencies.len(), 1);
         assert!(manifest.dependencies.contains_key("lua"));
-        
+
         // Verify file was created
-        let manifest_path = temp.path()
+        let manifest_path = temp
+            .path()
             .join("lua_modules")
             .join(".lpm")
             .join("packages")
@@ -80,4 +81,3 @@ mod tests {
         assert!(manifest_path.exists());
     }
 }
-

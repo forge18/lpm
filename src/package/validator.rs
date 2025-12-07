@@ -1,6 +1,6 @@
+use crate::core::version::parse_constraint;
 use crate::core::{LpmError, LpmResult};
 use crate::package::manifest::PackageManifest;
-use crate::core::version::parse_constraint;
 use std::collections::HashSet;
 
 /// Validates package.yaml schema and content
@@ -27,11 +27,16 @@ impl ManifestValidator {
     fn validate_name(name: &str) -> LpmResult<()> {
         // Name should be valid identifier
         if name.is_empty() {
-            return Err(LpmError::Package("Package name cannot be empty".to_string()));
+            return Err(LpmError::Package(
+                "Package name cannot be empty".to_string(),
+            ));
         }
 
         // Check for valid characters (alphanumeric, hyphen, underscore)
-        if !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        if !name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        {
             return Err(LpmError::Package(format!(
                 "Package name '{}' contains invalid characters. Use only alphanumeric, hyphen, or underscore",
                 name
@@ -155,7 +160,7 @@ impl ManifestValidator {
                         )));
                     }
                 }
-                
+
                 // Rust builds must specify modules (native Lua modules, not standalone libraries)
                 if build.modules.is_empty() {
                     return Err(LpmError::Package(
@@ -171,9 +176,7 @@ impl ManifestValidator {
         Ok(())
     }
 
-    fn validate_scripts(
-        scripts: &std::collections::HashMap<String, String>,
-    ) -> LpmResult<()> {
+    fn validate_scripts(scripts: &std::collections::HashMap<String, String>) -> LpmResult<()> {
         for (name, command) in scripts {
             if name.is_empty() {
                 return Err(LpmError::Package("Script name cannot be empty".to_string()));
@@ -187,7 +190,13 @@ impl ManifestValidator {
             }
 
             // Check for reserved script names
-            let reserved = ["install", "preinstall", "postinstall", "prepublish", "publish"];
+            let reserved = [
+                "install",
+                "preinstall",
+                "postinstall",
+                "prepublish",
+                "publish",
+            ];
             if reserved.contains(&name.as_str()) {
                 return Err(LpmError::Package(format!(
                     "Script name '{}' is reserved and cannot be used",
@@ -224,4 +233,3 @@ mod tests {
         assert!(ManifestValidator::validate_version_format("1.2.x").is_err());
     }
 }
-

@@ -1,7 +1,7 @@
+use crate::core::version::parse_constraint;
 use crate::core::{LpmError, LpmResult};
 use crate::package::manifest::PackageManifest;
 use crate::resolver::DependencyGraph;
-use crate::core::version::parse_constraint;
 use std::collections::HashMap;
 
 /// Checks for conflicts before installation
@@ -42,9 +42,7 @@ impl ConflictChecker {
         Ok(())
     }
 
-    fn check_version_conflicts(
-        deps: &HashMap<String, String>,
-    ) -> LpmResult<()> {
+    fn check_version_conflicts(deps: &HashMap<String, String>) -> LpmResult<()> {
         // Build dependency graph to check for circular dependencies
         let mut graph = DependencyGraph::new();
 
@@ -102,8 +100,12 @@ mod tests {
     #[test]
     fn test_check_duplicate_dependency() {
         let mut manifest = PackageManifest::default("test".to_string());
-        manifest.dependencies.insert("test-pkg".to_string(), "1.0.0".to_string());
-        manifest.dev_dependencies.insert("test-pkg".to_string(), "2.0.0".to_string());
+        manifest
+            .dependencies
+            .insert("test-pkg".to_string(), "1.0.0".to_string());
+        manifest
+            .dev_dependencies
+            .insert("test-pkg".to_string(), "2.0.0".to_string());
 
         let result = ConflictChecker::check_conflicts(&manifest);
         assert!(result.is_err());
@@ -113,10 +115,11 @@ mod tests {
     #[test]
     fn test_check_new_dependency_conflict() {
         let mut manifest = PackageManifest::default("test".to_string());
-        manifest.dependencies.insert("test-pkg".to_string(), "1.0.0".to_string());
+        manifest
+            .dependencies
+            .insert("test-pkg".to_string(), "1.0.0".to_string());
 
         let result = ConflictChecker::check_new_dependency(&manifest, "test-pkg", "2.0.0");
         assert!(result.is_err());
     }
 }
-

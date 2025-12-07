@@ -28,7 +28,18 @@ Thank you for your interest in contributing to LPM! This guide will help you get
    cargo test
    ```
 
-4. **Run LPM locally:**
+4. **Set up pre-commit hooks (automatic):**
+   
+   Hooks are automatically installed when you build the project! RustyHook is configured in `.rusty-hook.toml` and will run formatting and linting checks before each commit.
+   
+   Just run:
+   ```bash
+   cargo build
+   ```
+   
+   The hooks are now active!
+
+5. **Run LPM locally:**
    ```bash
    cargo run -- install
    ```

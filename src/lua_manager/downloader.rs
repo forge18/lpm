@@ -15,11 +15,9 @@ impl LuaDownloader {
     pub fn new(cache_dir: PathBuf) -> LpmResult<Self> {
         // Get source URLs from config
         let config = crate::config::Config::load().unwrap_or_default();
-        let default_source_url = config
-            .lua_binary_source_url
-            .unwrap_or_else(|| {
-                "https://github.com/dyne/luabinaries/releases/latest/download".to_string()
-            });
+        let default_source_url = config.lua_binary_source_url.unwrap_or_else(|| {
+            "https://github.com/dyne/luabinaries/releases/latest/download".to_string()
+        });
         let version_sources = config.lua_binary_sources.clone().unwrap_or_default();
 
         Ok(Self {
@@ -75,11 +73,7 @@ impl LuaDownloader {
             Ok(format!("{}{}-macos-arm64", prefix, version_code))
         }
 
-        #[cfg(not(any(
-            target_os = "windows",
-            target_os = "linux",
-            target_os = "macos"
-        )))]
+        #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
         {
             Err(LpmError::Package(format!(
                 "Platform not supported: {}-{}",
@@ -166,7 +160,8 @@ impl LuaDownloader {
     /// This is informational only - installation will still attempt
     /// even for unknown versions (they might be available from custom sources)
     pub fn is_known_version(&self, version: &str) -> bool {
-        self.list_available_versions().contains(&version.to_string())
+        self.list_available_versions()
+            .contains(&version.to_string())
     }
 }
 
@@ -189,7 +184,7 @@ mod tests {
     fn test_lua_downloader_resolve_version() {
         let temp = TempDir::new().unwrap();
         let downloader = LuaDownloader::new(temp.path().to_path_buf()).unwrap();
-        
+
         assert_eq!(downloader.resolve_version("latest"), "5.4.8");
         assert_eq!(downloader.resolve_version("5.1"), "5.1.5");
         assert_eq!(downloader.resolve_version("5.3"), "5.3.6");
@@ -201,7 +196,7 @@ mod tests {
     fn test_lua_downloader_is_known_version() {
         let temp = TempDir::new().unwrap();
         let downloader = LuaDownloader::new(temp.path().to_path_buf()).unwrap();
-        
+
         assert!(downloader.is_known_version("5.1.5"));
         assert!(downloader.is_known_version("5.3.6"));
         assert!(downloader.is_known_version("5.4.8"));
@@ -216,4 +211,3 @@ mod tests {
         assert!(!url.is_empty());
     }
 }
-

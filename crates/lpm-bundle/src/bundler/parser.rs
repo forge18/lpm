@@ -11,20 +11,20 @@ impl LuaParser {
     }
 
     /// Parse Lua code and extract require() calls
-    /// 
+    ///
     /// Uses full_moon parser when possible, falls back to regex for compatibility
     pub fn extract_requires(&self, content: &str) -> LpmResult<Vec<String>> {
         // Try to parse with full_moon first
         if let Ok(ast) = parse(content) {
             return self.extract_requires_from_ast(&ast);
         }
-        
+
         // Fall back to regex-based extraction
         self.extract_requires_regex(content)
     }
 
     /// Extract require() calls from parsed AST.
-    /// 
+    ///
     /// Currently returns empty vector, causing fallback to regex-based extraction.
     /// AST-based extraction would provide more accurate results but is not yet implemented.
     fn extract_requires_from_ast(&self, _ast: &Ast) -> LpmResult<Vec<String>> {
@@ -36,7 +36,7 @@ impl LuaParser {
     fn extract_requires_regex(&self, content: &str) -> LpmResult<Vec<String>> {
         use regex::Regex;
         let mut requires = Vec::new();
-        
+
         // Match require("module") and require 'module'
         let re1 = Regex::new(r#"require\s*\(\s*['"]([^'"]+)['"]\s*\)"#)
             .map_err(|e| LpmError::Package(format!("Invalid regex: {}", e)))?;
@@ -45,7 +45,7 @@ impl LuaParser {
                 requires.push(m.as_str().to_string());
             }
         }
-        
+
         // Match require[[module]] (long strings)
         let re2 = Regex::new(r#"require\s*\(\s*\[\[([^\]]+)\]\]\s*\)"#)
             .map_err(|e| LpmError::Package(format!("Invalid regex: {}", e)))?;
@@ -54,7 +54,7 @@ impl LuaParser {
                 requires.push(m.as_str().to_string());
             }
         }
-        
+
         // Match require 'module' (without parens)
         let re3 = Regex::new(r#"\brequire\s+['"]([^'"]+)['"]"#)
             .map_err(|e| LpmError::Package(format!("Invalid regex: {}", e)))?;
@@ -63,9 +63,7 @@ impl LuaParser {
                 requires.push(m.as_str().to_string());
             }
         }
-        
+
         Ok(requires)
     }
-
 }
-

@@ -1,18 +1,18 @@
 use lpm::cache::Cache;
 use lpm::config::Config;
-use lpm::core::{LpmError, LpmResult};
 use lpm::core::path::find_project_root;
+use lpm::core::version::Version;
+use lpm::core::{LpmError, LpmResult};
 use lpm::luarocks::client::LuaRocksClient;
 use lpm::package::installer::PackageInstaller;
+use lpm::package::interactive::confirm;
 use lpm::package::lockfile::Lockfile;
 use lpm::package::lockfile_builder::LockfileBuilder;
 use lpm::package::manifest::PackageManifest;
 use lpm::package::rollback::with_rollback_async;
 use lpm::package::update_diff::UpdateDiff;
-use lpm::package::interactive::confirm;
 use lpm::path_setup::PathSetup;
 use lpm::resolver::DependencyResolver;
-use lpm::core::version::Version;
 use std::env;
 
 pub async fn run(package: Option<String>) -> LpmResult<()> {
@@ -41,7 +41,9 @@ pub async fn run(package: Option<String>) -> LpmResult<()> {
         let resolved_versions = if let Some(package_name) = &package {
             // For single package update, resolve just that package
             let mut deps = std::collections::HashMap::new();
-            if let Some(constraint) = manifest.dependencies.get(package_name)
+            if let Some(constraint) = manifest
+                .dependencies
+                .get(package_name)
                 .or_else(|| manifest.dev_dependencies.get(package_name))
             {
                 deps.insert(package_name.clone(), constraint.clone());
@@ -59,11 +61,7 @@ pub async fn run(package: Option<String>) -> LpmResult<()> {
         };
 
         // Calculate diff
-        let mut diff = UpdateDiff::calculate(
-            &lockfile,
-            &resolved_versions,
-            &resolved_dev_versions,
-        );
+        let mut diff = UpdateDiff::calculate(&lockfile, &resolved_versions, &resolved_dev_versions);
 
         // Calculate file changes
         diff.calculate_file_changes(&project_root);
@@ -92,10 +90,27 @@ pub async fn run(package: Option<String>) -> LpmResult<()> {
         // Apply updates
         if let Some(package_name) = package {
             // Update specific package
-            update_package(&project_root, &mut manifest, &resolver, &package_name, &lockfile, &installer).await?;
+            update_package(
+                &project_root,
+                &mut manifest,
+                &resolver,
+                &package_name,
+                &lockfile,
+                &installer,
+            )
+            .await?;
         } else {
             // Update all packages
-            update_all_packages(&project_root, &mut manifest, &resolver, &lockfile, &resolved_versions, &resolved_dev_versions, &installer).await?;
+            update_all_packages(
+                &project_root,
+                &mut manifest,
+                &resolver,
+                &lockfile,
+                &resolved_versions,
+                &resolved_dev_versions,
+                &installer,
+            )
+            .await?;
         }
 
         // Install loader after updates
@@ -107,14 +122,19 @@ pub async fn run(package: Option<String>) -> LpmResult<()> {
         // Regenerate lockfile incrementally (include dev dependencies for updates)
         let builder = LockfileBuilder::new(cache);
         let new_lockfile = if let Some(existing) = &lockfile {
-            builder.update_lockfile(existing, &manifest, &project_root, false).await?
+            builder
+                .update_lockfile(existing, &manifest, &project_root, false)
+                .await?
         } else {
-            builder.build_lockfile(&manifest, &project_root, false).await?
+            builder
+                .build_lockfile(&manifest, &project_root, false)
+                .await?
         };
         new_lockfile.save(&project_root)?;
 
         Ok(())
-    }).await
+    })
+    .await
 }
 
 async fn update_package(
@@ -150,13 +170,17 @@ async fn update_package(
     deps.insert(package_name.to_string(), version_constraint.clone());
 
     let resolved = resolver.resolve(&deps).await?;
-    let new_version = resolved.get(package_name as &str)
-        .ok_or_else(|| LpmError::Package(format!("Could not resolve version for '{}'", package_name)))?;
+    let new_version = resolved.get(package_name as &str).ok_or_else(|| {
+        LpmError::Package(format!("Could not resolve version for '{}'", package_name))
+    })?;
 
     if let Some(current) = &current_version {
         let current_v = Version::parse(current)?;
         if current_v == *new_version {
-            println!("  ✓ {} is already at latest version: {}", package_name, new_version);
+            println!(
+                "  ✓ {} is already at latest version: {}",
+                package_name, new_version
+            );
             return Ok(());
         }
         println!("  {} → {}", current, new_version);
@@ -171,7 +195,9 @@ async fn update_package(
 
     // Install new version
     let new_version_str = new_version.to_string();
-    installer.install_package(package_name, &new_version_str).await?;
+    installer
+        .install_package(package_name, &new_version_str)
+        .await?;
 
     println!("✓ Updated {} to {}", package_name, new_version);
 
@@ -196,7 +222,9 @@ async fn update_all_packages(
         // Check if version actually changed
         let needs_update = if let Some(lf) = lockfile {
             if let Some(pkg) = lf.get_package(name) {
-                Version::parse(&pkg.version).map(|v| v != *version).unwrap_or(true)
+                Version::parse(&pkg.version)
+                    .map(|v| v != *version)
+                    .unwrap_or(true)
             } else {
                 true
             }
@@ -222,7 +250,9 @@ async fn update_all_packages(
         // Check if version actually changed
         let needs_update = if let Some(lf) = lockfile {
             if let Some(pkg) = lf.get_package(name) {
-                Version::parse(&pkg.version).map(|v| v != *version).unwrap_or(true)
+                Version::parse(&pkg.version)
+                    .map(|v| v != *version)
+                    .unwrap_or(true)
             } else {
                 true
             }

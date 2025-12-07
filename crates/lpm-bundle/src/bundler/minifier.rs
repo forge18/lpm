@@ -11,20 +11,20 @@ impl Minifier {
     }
 
     /// Minify Lua code using parser for better results
-    /// 
+    ///
     /// Uses full_moon parser when possible, falls back to basic minification
     pub fn minify(&self, content: &str) -> LpmResult<String> {
         // Try to use parser-based minification
         if let Ok(ast) = parse(content) {
             return self.minify_with_ast(&ast, content);
         }
-        
+
         // Fall back to basic minification
         self.minify_basic(content)
     }
 
     /// Minify using AST for better results.
-    /// 
+    ///
     /// Currently falls back to basic minification as AST-based minification
     /// is not yet implemented. When implemented, this would provide better
     /// whitespace removal and code optimization.
@@ -39,10 +39,10 @@ impl Minifier {
         // Basic comment stripping
         let mut result = String::new();
         let mut in_multiline_comment = false;
-        
+
         for line in content.lines() {
             let trimmed = line.trim();
-            
+
             // Handle multiline comments
             if trimmed.contains("--[[") {
                 in_multiline_comment = true;
@@ -54,7 +54,7 @@ impl Minifier {
             if in_multiline_comment {
                 continue;
             }
-            
+
             // Skip single-line comments
             if trimmed.starts_with("--") && !trimmed.starts_with("--[[") {
                 // Check if it's actually a comment or part of a string
@@ -62,7 +62,7 @@ impl Minifier {
                 let mut in_string = false;
                 let mut string_char = None;
                 let mut is_comment = true;
-                
+
                 while let Some(ch) = chars.next() {
                     if !in_string && (ch == '"' || ch == '\'') {
                         in_string = true;
@@ -72,21 +72,21 @@ impl Minifier {
                         in_string = false;
                         string_char = None;
                     }
-                    
+
                     if !in_string && ch == '-' && chars.clone().next() == Some('-') {
                         break;
                     }
                 }
-                
+
                 if is_comment {
                     continue;
                 }
             }
-            
+
             result.push_str(line);
             result.push('\n');
         }
-        
+
         Ok(result)
     }
 
@@ -94,15 +94,15 @@ impl Minifier {
     fn minify_basic(&self, content: &str) -> LpmResult<String> {
         let mut result = String::new();
         let mut in_multiline_comment = false;
-        
+
         for line in content.lines() {
             let trimmed = line.trim();
-            
+
             // Skip empty lines
             if trimmed.is_empty() {
                 continue;
             }
-            
+
             // Handle multiline comments
             if trimmed.contains("--[[") {
                 in_multiline_comment = true;
@@ -114,7 +114,7 @@ impl Minifier {
             if in_multiline_comment {
                 continue;
             }
-            
+
             // Skip single-line comments (but preserve if in string)
             if trimmed.starts_with("--") && !trimmed.starts_with("--[[") {
                 // Check if it's actually a comment or part of a string
@@ -133,15 +133,14 @@ impl Minifier {
                     continue;
                 }
             }
-            
+
             // Add line with minimal whitespace (preserve structure)
             if !result.is_empty() {
                 result.push(' ');
             }
             result.push_str(trimmed);
         }
-        
+
         Ok(result)
     }
 }
-

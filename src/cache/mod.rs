@@ -1,5 +1,5 @@
-use crate::core::{LpmError, LpmResult};
 use crate::core::path::{cache_dir, ensure_dir};
+use crate::core::{LpmError, LpmResult};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Write;
@@ -78,7 +78,11 @@ impl Cache {
     /// Read a file from cache
     pub fn read(&self, path: &Path) -> LpmResult<Vec<u8>> {
         fs::read(path).map_err(|e| {
-            LpmError::Cache(format!("Failed to read from cache: {}: {}", path.display(), e))
+            LpmError::Cache(format!(
+                "Failed to read from cache: {}: {}",
+                path.display(),
+                e
+            ))
         })
     }
 
@@ -87,10 +91,20 @@ impl Cache {
         if let Some(parent) = path.parent() {
             ensure_dir(parent)?;
         }
-        let mut file = fs::File::create(path)
-            .map_err(|e| LpmError::Cache(format!("Failed to create cache file: {}: {}", path.display(), e)))?;
-        file.write_all(data)
-            .map_err(|e| LpmError::Cache(format!("Failed to write to cache: {}: {}", path.display(), e)))?;
+        let mut file = fs::File::create(path).map_err(|e| {
+            LpmError::Cache(format!(
+                "Failed to create cache file: {}: {}",
+                path.display(),
+                e
+            ))
+        })?;
+        file.write_all(data).map_err(|e| {
+            LpmError::Cache(format!(
+                "Failed to write to cache: {}: {}",
+                path.display(),
+                e
+            ))
+        })?;
         Ok(())
     }
 
@@ -113,10 +127,17 @@ impl Cache {
 
     /// Get the cached path for a Rust build artifact
     /// Get the cache path for a Rust build, including Lua version
-    /// 
+    ///
     /// Structure: rust_builds/{package}/{version}/{lua_version}/{target}/
-    pub fn rust_build_path(&self, package: &str, version: &str, lua_version: &str, target: &str) -> PathBuf {
-        let dir = self.rust_builds_dir()
+    pub fn rust_build_path(
+        &self,
+        package: &str,
+        version: &str,
+        lua_version: &str,
+        target: &str,
+    ) -> PathBuf {
+        let dir = self
+            .rust_builds_dir()
             .join(package)
             .join(version)
             .join(lua_version)
@@ -133,12 +154,18 @@ impl Cache {
     }
 
     /// Check if a Rust build artifact is cached
-    pub fn has_rust_build(&self, package: &str, version: &str, lua_version: &str, target: &str) -> bool {
+    pub fn has_rust_build(
+        &self,
+        package: &str,
+        version: &str,
+        lua_version: &str,
+        target: &str,
+    ) -> bool {
         self.exists(&self.rust_build_path(package, version, lua_version, target))
     }
 
     /// Store a Rust build artifact in cache
-    /// 
+    ///
     /// Caches are stored per Lua version to support multiple Lua installations
     pub fn store_rust_build(
         &self,
@@ -149,21 +176,28 @@ impl Cache {
         artifact_path: &Path,
     ) -> LpmResult<PathBuf> {
         let cache_path = self.rust_build_path(package, version, lua_version, target);
-        
+
         // Ensure parent directory exists
         if let Some(parent) = cache_path.parent() {
             ensure_dir(parent)?;
         }
 
         // Copy artifact to cache
-        fs::copy(artifact_path, &cache_path)
-            .map_err(|e| LpmError::Cache(format!("Failed to copy build artifact to cache: {}", e)))?;
+        fs::copy(artifact_path, &cache_path).map_err(|e| {
+            LpmError::Cache(format!("Failed to copy build artifact to cache: {}", e))
+        })?;
 
         Ok(cache_path)
     }
 
     /// Get cached Rust build artifact path
-    pub fn get_rust_build(&self, package: &str, version: &str, lua_version: &str, target: &str) -> Option<PathBuf> {
+    pub fn get_rust_build(
+        &self,
+        package: &str,
+        version: &str,
+        lua_version: &str,
+        target: &str,
+    ) -> Option<PathBuf> {
         let path = self.rust_build_path(package, version, lua_version, target);
         if self.exists(&path) {
             Some(path)
@@ -174,7 +208,7 @@ impl Cache {
 
     /// Clean old cache entries based on age and size
     pub fn clean(&self, max_age_days: u64, max_size_mb: u64) -> LpmResult<CacheCleanResult> {
-        use std::time::{SystemTime, Duration};
+        use std::time::{Duration, SystemTime};
 
         let max_age = Duration::from_secs(max_age_days * 24 * 60 * 60);
         let max_size_bytes = max_size_mb * 1024 * 1024;
@@ -237,7 +271,11 @@ impl Cache {
             if let Ok(age) = now.duration_since(*modified) {
                 if age > max_age {
                     if let Err(e) = fs::remove_file(path) {
-                        eprintln!("Warning: Failed to remove old cache file {}: {}", path.display(), e);
+                        eprintln!(
+                            "Warning: Failed to remove old cache file {}: {}",
+                            path.display(),
+                            e
+                        );
                     } else {
                         result.files_removed += 1;
                         result.bytes_freed += size;
@@ -256,7 +294,11 @@ impl Cache {
                 }
                 if path.exists() {
                     if let Err(e) = fs::remove_file(path) {
-                        eprintln!("Warning: Failed to remove cache file {}: {}", path.display(), e);
+                        eprintln!(
+                            "Warning: Failed to remove cache file {}: {}",
+                            path.display(),
+                            e
+                        );
                     } else {
                         result.files_removed += 1;
                         result.bytes_freed += size;

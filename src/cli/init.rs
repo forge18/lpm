@@ -1,9 +1,9 @@
-use crate::cli::template::{TemplateDiscovery, TemplateRenderer};
 use crate::cli::install::run_interactive;
-use lpm::core::{LpmError, LpmResult};
+use crate::cli::template::{TemplateDiscovery, TemplateRenderer};
+use dialoguer::{Confirm, Input, MultiSelect, Select};
 use lpm::core::path::find_project_root;
+use lpm::core::{LpmError, LpmResult};
 use lpm::package::manifest::PackageManifest;
-use dialoguer::{Input, Select, Confirm, MultiSelect};
 use std::collections::HashMap;
 use std::env;
 use std::path::Path;
@@ -145,12 +145,12 @@ async fn run_wizard(
         ("build", "Build project"),
         ("start", "Start application"),
     ];
-    
+
     let script_options: Vec<String> = common_scripts
         .iter()
         .map(|(name, desc)| format!("{} - {}", name, desc))
         .collect();
-    
+
     let script_selections = MultiSelect::new()
         .with_prompt("Set up common scripts? (space to select, enter to confirm)")
         .items(&script_options)
@@ -173,7 +173,14 @@ async fn run_wizard(
         println!("  Initial dependencies: Yes (will be added after project creation)");
     }
     if !script_selections.is_empty() {
-        println!("  Scripts: {}", script_selections.iter().map(|&i| common_scripts[i].0).collect::<Vec<_>>().join(", "));
+        println!(
+            "  Scripts: {}",
+            script_selections
+                .iter()
+                .map(|&i| common_scripts[i].0)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
 
     let confirmed = Confirm::new()
@@ -203,16 +210,24 @@ async fn run_wizard(
         let (script_name, _) = common_scripts[idx];
         match script_name {
             "dev" => {
-                manifest.scripts.insert("dev".to_string(), "lpm watch dev".to_string());
+                manifest
+                    .scripts
+                    .insert("dev".to_string(), "lpm watch dev".to_string());
             }
             "test" => {
-                manifest.scripts.insert("test".to_string(), "lua tests/run.lua".to_string());
+                manifest
+                    .scripts
+                    .insert("test".to_string(), "lua tests/run.lua".to_string());
             }
             "build" => {
-                manifest.scripts.insert("build".to_string(), "lua src/build.lua".to_string());
+                manifest
+                    .scripts
+                    .insert("build".to_string(), "lua src/build.lua".to_string());
             }
             "start" => {
-                manifest.scripts.insert("start".to_string(), "lua src/main.lua".to_string());
+                manifest
+                    .scripts
+                    .insert("start".to_string(), "lua src/main.lua".to_string());
             }
             _ => {}
         }

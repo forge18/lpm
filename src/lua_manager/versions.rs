@@ -3,22 +3,22 @@ use crate::core::{LpmError, LpmResult};
 /// Parse and validate Lua version strings
 pub fn parse_version(version: &str) -> LpmResult<(u32, u32, u32)> {
     let parts: Vec<&str> = version.split('.').collect();
-    
+
     if parts.len() < 2 {
         return Err(LpmError::Package(format!(
             "Invalid version format: {}. Expected format: X.Y.Z",
             version
         )));
     }
-    
+
     let major = parts[0]
         .parse::<u32>()
         .map_err(|_| LpmError::Package(format!("Invalid major version: {}", parts[0])))?;
-    
+
     let minor = parts[1]
         .parse::<u32>()
         .map_err(|_| LpmError::Package(format!("Invalid minor version: {}", parts[1])))?;
-    
+
     let patch = if parts.len() > 2 {
         parts[2]
             .parse::<u32>()
@@ -26,7 +26,7 @@ pub fn parse_version(version: &str) -> LpmResult<(u32, u32, u32)> {
     } else {
         0
     };
-    
+
     Ok((major, minor, patch))
 }
 
@@ -68,4 +68,3 @@ mod tests {
         assert!(compare_versions("5.4.8", "5.4.8").unwrap().is_eq());
     }
 }
-

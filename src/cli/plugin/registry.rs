@@ -45,20 +45,22 @@ pub struct PluginRegistry;
 
 impl PluginRegistry {
     /// Search for plugins in registry
-    /// 
+    ///
     /// Searches crates.io for packages matching "lpm-*"
     pub async fn search(query: &str) -> LpmResult<Vec<RegistryEntry>> {
         let client = reqwest::Client::new();
-        
+
         // Search crates.io for lpm-* packages
-        let url = format!("https://crates.io/api/v1/crates?q={}&per_page=20", 
-                         urlencoding::encode(query));
-        
+        let url = format!(
+            "https://crates.io/api/v1/crates?q={}&per_page=20",
+            urlencoding::encode(query)
+        );
+
         #[derive(Deserialize)]
         struct CratesResponse {
             crates: Vec<CrateInfo>,
         }
-        
+
         #[derive(Deserialize)]
         struct CrateInfo {
             name: String,
@@ -67,26 +69,26 @@ impl PluginRegistry {
             #[serde(rename = "max_version")]
             version: String,
         }
-        
+
         let response = client
             .get(&url)
             .header("User-Agent", "lpm/0.1.0")
             .send()
             .await
             .map_err(LpmError::Http)?;
-        
+
         if !response.status().is_success() {
             return Err(LpmError::Package(format!(
                 "Registry search failed with status: {}",
                 response.status()
             )));
         }
-        
+
         let crates_resp: CratesResponse = response
             .json()
             .await
             .map_err(|e| LpmError::Package(format!("Failed to parse registry response: {}", e)))?;
-        
+
         let mut results = Vec::new();
         for crate_info in crates_resp.crates {
             // Only include packages that start with "lpm-" prefix.
@@ -104,12 +106,12 @@ impl PluginRegistry {
                 });
             }
         }
-        
+
         Ok(results)
     }
 
     /// Get plugin information from registry
-    /// 
+    ///
     /// Tries to find plugin on GitHub by checking common repository patterns
     pub async fn get_plugin(name: &str) -> LpmResult<Option<RegistryEntry>> {
         // Try to find GitHub repository for lpm-{name}.
@@ -117,60 +119,66 @@ impl PluginRegistry {
         // - github.com/{user}/lpm-{name}
         // - github.com/{user}/{name}
         // - github.com/lpm-org/lpm-{name}
-        
+
         // Attempt to fetch from GitHub releases using common repository patterns.
         let repo_patterns = vec![
             format!("lpm-org/lpm-{}", name),
             format!("{}/lpm-{}", name, name), // Username same as plugin name.
         ];
-        
+
         for repo in repo_patterns {
             if let Ok(Some(entry)) = Self::get_plugin_from_github(&repo, name).await {
                 return Ok(Some(entry));
             }
         }
-        
+
         // Fallback: search crates.io if GitHub lookup fails.
         let search_results = Self::search(name).await?;
         Ok(search_results.into_iter().find(|e| e.name == name))
     }
 
     /// Get plugin from GitHub releases
-    async fn get_plugin_from_github(repo: &str, plugin_name: &str) -> LpmResult<Option<RegistryEntry>> {
+    async fn get_plugin_from_github(
+        repo: &str,
+        plugin_name: &str,
+    ) -> LpmResult<Option<RegistryEntry>> {
         let client = reqwest::Client::new();
         let url = format!("https://api.github.com/repos/{}/releases/latest", repo);
-        
+
         let response = client
             .get(&url)
             .header("User-Agent", "lpm/0.1.0")
             .header("Accept", "application/vnd.github.v3+json")
             .send()
             .await;
-        
+
         let release: GitHubRelease = match response {
-            Ok(resp) if resp.status().is_success() => {
-                resp.json().await.map_err(|e| LpmError::Package(format!("Failed to parse GitHub response: {}", e)))?
-            }
+            Ok(resp) if resp.status().is_success() => resp.json().await.map_err(|e| {
+                LpmError::Package(format!("Failed to parse GitHub response: {}", e))
+            })?,
             _ => return Ok(None),
         };
-        
+
         // Find binary asset matching current platform (look for platform-specific binaries).
         let binary_asset = release.assets.iter().find(|asset| {
             let name = asset.name.to_lowercase();
-            name.contains("lpm-") && (
-                name.ends_with(".exe") || 
-                name.ends_with("x86_64") || 
-                name.ends_with("aarch64") ||
-                name.contains("linux") ||
-                name.contains("macos") ||
-                name.contains("darwin") ||
-                name.contains("windows")
-            )
+            name.contains("lpm-")
+                && (name.ends_with(".exe")
+                    || name.ends_with("x86_64")
+                    || name.ends_with("aarch64")
+                    || name.contains("linux")
+                    || name.contains("macos")
+                    || name.contains("darwin")
+                    || name.contains("windows"))
         });
-        
+
         Ok(Some(RegistryEntry {
             name: plugin_name.to_string(),
-            version: release.tag_name.strip_prefix('v').unwrap_or(&release.tag_name).to_string(),
+            version: release
+                .tag_name
+                .strip_prefix('v')
+                .unwrap_or(&release.tag_name)
+                .to_string(),
             description: release.body.clone(),
             author: None,
             homepage: Some(format!("https://github.com/{}", repo)),

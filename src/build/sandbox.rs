@@ -7,7 +7,7 @@ pub struct BuildSandbox;
 
 impl BuildSandbox {
     /// Execute a cargo command in a sandboxed environment
-    /// 
+    ///
     /// The sandbox limits:
     /// - Filesystem access to project directory only
     /// - Network access only for cargo (crates.io, GitHub)
@@ -89,4 +89,3 @@ mod tests {
         let _ = BuildSandbox::check_cargo_zigbuild();
     }
 }
-

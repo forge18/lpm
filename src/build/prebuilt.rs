@@ -1,13 +1,13 @@
-use crate::core::{LpmError, LpmResult};
-use crate::lua_version::detector::LuaVersion;
 use crate::build::targets::Target;
 use crate::cache::Cache;
 use crate::core::path::cache_dir;
-use std::path::PathBuf;
+use crate::core::{LpmError, LpmResult};
+use crate::lua_version::detector::LuaVersion;
 use std::fs;
+use std::path::PathBuf;
 
 /// Manages pre-built binary downloads for Rust-compiled Lua native modules
-/// 
+///
 /// These are pre-compiled dynamic libraries (.so/.dylib/.dll) that were built
 /// from Rust code and are part of Lua module packages. NOT standalone Rust libraries.
 pub struct PrebuiltBinaryManager {
@@ -22,10 +22,10 @@ impl PrebuiltBinaryManager {
     }
 
     /// Check if a pre-built native module binary is available for a package
-    /// 
+    ///
     /// These are compiled Rust code as dynamic libraries (.so/.dylib/.dll)
     /// that are part of Lua module packages.
-    /// 
+    ///
     /// This checks:
     /// 1. Local cache (already downloaded)
     /// 2. LuaRocks manifest for binary URLs (future: CDN/registry)
@@ -37,7 +37,8 @@ impl PrebuiltBinaryManager {
         target: &Target,
     ) -> bool {
         let lua_version_str = lua_version.major_minor();
-        self.cache.has_rust_build(package, version, &lua_version_str, &target.triple)
+        self.cache
+            .has_rust_build(package, version, &lua_version_str, &target.triple)
     }
 
     /// Get the path to a pre-built binary if available
@@ -49,11 +50,12 @@ impl PrebuiltBinaryManager {
         target: &Target,
     ) -> Option<PathBuf> {
         let lua_version_str = lua_version.major_minor();
-        self.cache.get_rust_build(package, version, &lua_version_str, &target.triple)
+        self.cache
+            .get_rust_build(package, version, &lua_version_str, &target.triple)
     }
 
     /// Download a pre-built native module binary from a URL
-    /// 
+    ///
     /// Downloads a compiled Rust dynamic library (.so/.dylib/.dll) that is
     /// part of a Lua module package and stores it in the cache.
     pub async fn download_prebuilt(
@@ -68,12 +70,9 @@ impl PrebuiltBinaryManager {
         use tokio::io::AsyncWriteExt;
 
         let lua_version_str = lua_version.major_minor();
-        let cache_path = self.cache.rust_build_path(
-            package,
-            version,
-            &lua_version_str,
-            &target.triple,
-        );
+        let cache_path =
+            self.cache
+                .rust_build_path(package, version, &lua_version_str, &target.triple);
 
         // Ensure parent directory exists
         if let Some(parent) = cache_path.parent() {
@@ -83,8 +82,9 @@ impl PrebuiltBinaryManager {
         eprintln!("Downloading pre-built binary from {}...", url);
 
         // Download the binary
-        let response = reqwest::get(url).await
-            .map_err(|e| LpmError::Package(format!("Failed to download pre-built binary: {}", e)))?;
+        let response = reqwest::get(url).await.map_err(|e| {
+            LpmError::Package(format!("Failed to download pre-built binary: {}", e))
+        })?;
 
         if !response.status().is_success() {
             return Err(LpmError::Package(format!(
@@ -93,17 +93,22 @@ impl PrebuiltBinaryManager {
             )));
         }
 
-        let bytes = response.bytes().await
+        let bytes = response
+            .bytes()
+            .await
             .map_err(|e| LpmError::Package(format!("Failed to read binary data: {}", e)))?;
 
         // Write to cache
-        let mut file = File::create(&cache_path).await
+        let mut file = File::create(&cache_path)
+            .await
             .map_err(|e| LpmError::Cache(format!("Failed to create cache file: {}", e)))?;
 
-        file.write_all(&bytes).await
+        file.write_all(&bytes)
+            .await
             .map_err(|e| LpmError::Cache(format!("Failed to write binary to cache: {}", e)))?;
 
-        file.sync_all().await
+        file.sync_all()
+            .await
             .map_err(|e| LpmError::Cache(format!("Failed to sync cache file: {}", e)))?;
 
         eprintln!("✓ Downloaded pre-built binary: {}", cache_path.display());
@@ -112,7 +117,7 @@ impl PrebuiltBinaryManager {
     }
 
     /// Find binary URL from rockspec's binary_urls table
-    /// 
+    ///
     /// Looks for a binary URL matching the current Lua version and target.
     /// Format: `binary_urls = { ["5.4-x86_64-unknown-linux-gnu"] = "https://..." }`
     pub fn find_binary_url(
@@ -126,7 +131,7 @@ impl PrebuiltBinaryManager {
     }
 
     /// Try to get or download a pre-built binary
-    /// 
+    ///
     /// Returns the path to the binary if available, or None if not available
     pub async fn get_or_download(
         &self,
@@ -143,7 +148,10 @@ impl PrebuiltBinaryManager {
 
         // If a binary URL is provided, try to download it
         if let Some(url) = binary_url {
-            match self.download_prebuilt(package, version, lua_version, target, url).await {
+            match self
+                .download_prebuilt(package, version, lua_version, target, url)
+                .await
+            {
                 Ok(path) => Ok(Some(path)),
                 Err(e) => {
                     eprintln!("Warning: Failed to download pre-built binary: {}", e);
@@ -174,4 +182,3 @@ mod tests {
         assert!(!manager.has_prebuilt("test-package", "1.0.0", &lua_version, &target));
     }
 }
-

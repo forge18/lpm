@@ -66,7 +66,8 @@ impl ParallelDownloader {
             let task_clone = task.clone();
             let lua_version = installed_lua.cloned();
             join_set.spawn(async move {
-                Self::download_single_package(client.as_ref(), task_clone, lua_version.as_ref()).await
+                Self::download_single_package(client.as_ref(), task_clone, lua_version.as_ref())
+                    .await
             });
         }
 
@@ -92,19 +93,24 @@ impl ParallelDownloader {
         // Download rockspec
         let rockspec_result = client.download_rockspec(&task.rockspec_url).await;
         let rockspec = match rockspec_result {
-            Ok(content) => match client.parse_rockspec(&content) {
-                Ok(r) => {
-                    // Check Lua version compatibility if installed version is known
-                    let rockspec = r;
-                    if let Some(lua_version) = installed_lua {
-                        let lua_version_str = rockspec.lua_version.as_deref().unwrap_or("unknown").to_string();
-                        match PackageCompatibility::check_rockspec(lua_version, &rockspec) {
-                            Ok(true) => {
-                                // Compatible, continue
-                            }
-                            Ok(false) => {
-                                // Incompatible - return error
-                                return DownloadResult {
+            Ok(content) => {
+                match client.parse_rockspec(&content) {
+                    Ok(r) => {
+                        // Check Lua version compatibility if installed version is known
+                        let rockspec = r;
+                        if let Some(lua_version) = installed_lua {
+                            let lua_version_str = rockspec
+                                .lua_version
+                                .as_deref()
+                                .unwrap_or("unknown")
+                                .to_string();
+                            match PackageCompatibility::check_rockspec(lua_version, &rockspec) {
+                                Ok(true) => {
+                                    // Compatible, continue
+                                }
+                                Ok(false) => {
+                                    // Incompatible - return error
+                                    return DownloadResult {
                                     name: name.clone(),
                                     version: version.clone(),
                                     rockspec,
@@ -116,45 +122,46 @@ impl ParallelDownloader {
                                         lua_version.version_string()
                                     ))),
                                 };
-                            }
-                            Err(e) => {
-                                // Parse error, but continue (might be invalid constraint format)
-                                eprintln!("Warning: Failed to parse Lua version constraint for {}: {}", name, e);
+                                }
+                                Err(e) => {
+                                    // Parse error, but continue (might be invalid constraint format)
+                                    eprintln!("Warning: Failed to parse Lua version constraint for {}: {}", name, e);
+                                }
                             }
                         }
+                        rockspec
                     }
-                    rockspec
-                }
-                Err(e) => {
-                    use crate::luarocks::rockspec::{Rockspec, RockspecSource, RockspecBuild};
-                    return DownloadResult {
-                        name: name.clone(),
-                        version: version.clone(),
-                        rockspec: Rockspec {
-                            package: name.clone(),
+                    Err(e) => {
+                        use crate::luarocks::rockspec::{Rockspec, RockspecBuild, RockspecSource};
+                        return DownloadResult {
+                            name: name.clone(),
                             version: version.clone(),
-                            source: RockspecSource {
-                                url: String::new(),
-                                tag: None,
-                                branch: None,
+                            rockspec: Rockspec {
+                                package: name.clone(),
+                                version: version.clone(),
+                                source: RockspecSource {
+                                    url: String::new(),
+                                    tag: None,
+                                    branch: None,
+                                },
+                                dependencies: Vec::new(),
+                                build: RockspecBuild {
+                                    build_type: String::new(),
+                                    modules: HashMap::new(),
+                                    install: crate::luarocks::rockspec::InstallTable::default(),
+                                },
+                                description: None,
+                                homepage: None,
+                                license: None,
+                                lua_version: None,
+                                binary_urls: HashMap::new(),
                             },
-                            dependencies: Vec::new(),
-                            build: RockspecBuild {
-                                build_type: String::new(),
-                                modules: HashMap::new(),
-                                install: crate::luarocks::rockspec::InstallTable::default(),
-                            },
-                            description: None,
-                            homepage: None,
-                            license: None,
-                            lua_version: None,
-                            binary_urls: HashMap::new(),
-                        },
-                        source_path: None,
-                        error: Some(e),
-                    };
+                            source_path: None,
+                            error: Some(e),
+                        };
+                    }
                 }
-            },
+            }
             Err(e) => {
                 return DownloadResult {
                     name: name.clone(),
@@ -219,14 +226,14 @@ impl ParallelDownloader {
         installed_lua: Option<&LuaVersion>,
     ) -> LpmResult<Vec<DownloadResult>> {
         let total = tasks.len();
-        
+
         // Create progress bar
         let pb = ProgressBar::new(total as u64);
         pb.set_style(
             ProgressStyle::default_bar()
                 .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} packages")
                 .unwrap()
-                .progress_chars("#>-")
+                .progress_chars("#>-"),
         );
 
         // Download packages
@@ -270,9 +277,7 @@ pub fn create_download_tasks(
     for (name, version) in resolved_versions {
         if let Some(package_versions) = manifest.get_package_versions(name) {
             // Find the matching version
-            if let Some(package_version) = package_versions
-                .iter()
-                .find(|pv| pv.version == *version)
+            if let Some(package_version) = package_versions.iter().find(|pv| pv.version == *version)
             {
                 tasks.push(DownloadTask {
                     name: name.clone(),
@@ -295,17 +300,18 @@ mod tests {
     #[test]
     fn test_create_download_tasks() {
         let mut manifest = Manifest::default();
-        let mut versions = Vec::new();
-        versions.push(PackageVersion {
+        let versions = vec![PackageVersion {
             version: "1.0.0".to_string(),
             rockspec_url: "https://example.com/test-1.0.0.rockspec".to_string(),
             archive_url: Some("https://example.com/test-1.0.0.tar.gz".to_string()),
-        });
-        manifest.packages.insert("test-package".to_string(), versions);
-        
+        }];
+        manifest
+            .packages
+            .insert("test-package".to_string(), versions);
+
         let mut resolved = HashMap::new();
         resolved.insert("test-package".to_string(), "1.0.0".to_string());
-        
+
         let tasks = create_download_tasks(&manifest, &resolved);
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].name, "test-package");
@@ -318,7 +324,7 @@ mod tests {
         let manifest = Manifest::default();
         let mut resolved = HashMap::new();
         resolved.insert("test-package".to_string(), "1.0.0".to_string());
-        
+
         let tasks = create_download_tasks(&manifest, &resolved);
         assert_eq!(tasks.len(), 0);
     }
@@ -326,26 +332,28 @@ mod tests {
     #[test]
     fn test_create_download_tasks_multiple_packages() {
         let mut manifest = Manifest::default();
-        let mut versions1 = Vec::new();
-        versions1.push(PackageVersion {
+        let versions1 = vec![PackageVersion {
             version: "1.0.0".to_string(),
             rockspec_url: "https://example.com/test1-1.0.0.rockspec".to_string(),
             archive_url: Some("https://example.com/test1-1.0.0.tar.gz".to_string()),
-        });
-        manifest.packages.insert("test-package-1".to_string(), versions1);
-        
-        let mut versions2 = Vec::new();
-        versions2.push(PackageVersion {
+        }];
+        manifest
+            .packages
+            .insert("test-package-1".to_string(), versions1);
+
+        let versions2 = vec![PackageVersion {
             version: "2.0.0".to_string(),
             rockspec_url: "https://example.com/test2-2.0.0.rockspec".to_string(),
             archive_url: Some("https://example.com/test2-2.0.0.tar.gz".to_string()),
-        });
-        manifest.packages.insert("test-package-2".to_string(), versions2);
-        
+        }];
+        manifest
+            .packages
+            .insert("test-package-2".to_string(), versions2);
+
         let mut resolved = HashMap::new();
         resolved.insert("test-package-1".to_string(), "1.0.0".to_string());
         resolved.insert("test-package-2".to_string(), "2.0.0".to_string());
-        
+
         let tasks = create_download_tasks(&manifest, &resolved);
         assert_eq!(tasks.len(), 2);
     }
@@ -363,4 +371,3 @@ mod tests {
         assert_eq!(task.version, cloned.version);
     }
 }
-

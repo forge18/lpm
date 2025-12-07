@@ -1,10 +1,9 @@
-pub mod audit;
-pub mod vulnerability;
 pub mod advisory;
+pub mod audit;
 pub mod osv;
+pub mod vulnerability;
 
-pub use audit::SecurityAuditor;
-pub use vulnerability::{Vulnerability, Severity};
 pub use advisory::AdvisoryDatabase;
+pub use audit::SecurityAuditor;
 pub use osv::OsvApi;
-
+pub use vulnerability::{Severity, Vulnerability};

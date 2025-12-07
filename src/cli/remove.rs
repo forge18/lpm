@@ -1,5 +1,5 @@
-use lpm::core::{LpmError, LpmResult};
 use lpm::core::path::find_project_root;
+use lpm::core::{LpmError, LpmResult};
 use lpm::package::installer::PackageInstaller;
 use lpm::package::manifest::PackageManifest;
 use std::env;
@@ -17,7 +17,7 @@ pub fn run(package: String, global: bool) -> LpmResult<()> {
 
     // Try to remove from dependencies
     let removed_from_deps = manifest.dependencies.remove(&package).is_some();
-    
+
     // Try to remove from dev_dependencies
     let removed_from_dev = manifest.dev_dependencies.remove(&package).is_some();
 
@@ -52,14 +52,14 @@ pub fn run(package: String, global: bool) -> LpmResult<()> {
 }
 
 fn remove_global(package: &str) -> LpmResult<()> {
-    use lpm::core::path::{global_lua_modules_dir, global_bin_dir, global_packages_metadata_dir};
+    use lpm::core::path::{global_bin_dir, global_lua_modules_dir, global_packages_metadata_dir};
     use serde::Deserialize;
     use std::fs;
-    
+
     let global_lua_modules = global_lua_modules_dir()?;
     let global_bin = global_bin_dir()?;
     let metadata_dir = global_packages_metadata_dir()?;
-    
+
     // Check if package is installed globally
     let package_dir = global_lua_modules.join(package);
     if !package_dir.exists() {
@@ -76,7 +76,7 @@ fn remove_global(package: &str) -> LpmResult<()> {
         struct GlobalPackageMetadata {
             executables: Vec<String>,
         }
-        
+
         if let Ok(content) = fs::read_to_string(&metadata_file) {
             if let Ok(metadata) = serde_yaml::from_str::<GlobalPackageMetadata>(&content) {
                 metadata.executables
@@ -95,7 +95,7 @@ fn remove_global(package: &str) -> LpmResult<()> {
         let exe_path = global_bin.join(exe_name);
         #[cfg(windows)]
         let exe_path = global_bin.join(format!("{}.bat", exe_name));
-        
+
         if exe_path.exists() {
             fs::remove_file(&exe_path)?;
             println!("  ✓ Removed global executable: {}", exe_name);

@@ -23,7 +23,7 @@ end
     // Note: The parser may fail if required fields are missing or malformed,
     // but the important security property is that it doesn't execute the malicious code
     let result = Rockspec::parse_lua(malicious_rockspec);
-    
+
     // The parser might fail due to missing required fields (like build table),
     // but the key security property is that it doesn't execute the malicious Lua code.
     // If parsing succeeds, verify the extracted fields are correct.
@@ -60,7 +60,7 @@ license = "MIT"
 
     let result = Rockspec::parse_lua(valid_rockspec);
     assert!(result.is_ok(), "Valid rockspec should parse");
-    
+
     let rockspec = result.unwrap();
     assert_eq!(rockspec.package, "test-package");
     assert_eq!(rockspec.version, "1.0.0");
@@ -68,8 +68,8 @@ license = "MIT"
 
 #[test]
 fn test_checksum_verification_prevents_tampering() {
-    use lpm::package::checksum::ChecksumRecorder;
     use lpm::cache::Cache;
+    use lpm::package::checksum::ChecksumRecorder;
     use std::fs;
     use tempfile::TempDir;
 
@@ -91,4 +91,3 @@ fn test_checksum_verification_prevents_tampering() {
     let new_checksum = recorder.calculate_for_file(&test_file).unwrap();
     assert_ne!(checksum, new_checksum, "Checksum should detect tampering");
 }
-

@@ -8,7 +8,8 @@ impl UI {
     /// Print a formatted status message
     pub fn status(message: &str) {
         let timestamp = Self::timestamp();
-        println!("{} {} {}", 
+        println!(
+            "{} {} {}",
             timestamp.bright_black(),
             "●".bright_cyan(),
             message.bright_white()
@@ -18,7 +19,8 @@ impl UI {
     /// Print an error message
     pub fn error(message: &str) {
         let timestamp = Self::timestamp();
-        eprintln!("{} {} {}", 
+        eprintln!(
+            "{} {} {}",
             timestamp.bright_black(),
             "✗".red(),
             message.red()
@@ -28,7 +30,8 @@ impl UI {
     /// Print a warning message
     pub fn warning(message: &str) {
         let timestamp = Self::timestamp();
-        println!("{} {} {}", 
+        println!(
+            "{} {} {}",
             timestamp.bright_black(),
             "⚠".yellow(),
             message.yellow()
@@ -38,7 +41,8 @@ impl UI {
     /// Print an info message
     pub fn info(message: &str) {
         let timestamp = Self::timestamp();
-        println!("{} {} {}", 
+        println!(
+            "{} {} {}",
             timestamp.bright_black(),
             "ℹ".blue(),
             message.blue()
@@ -48,7 +52,8 @@ impl UI {
     /// Print a file change notification
     pub fn file_changed(path: &str) {
         let timestamp = Self::timestamp();
-        println!("{} {} {} {}", 
+        println!(
+            "{} {} {} {}",
             timestamp.bright_black(),
             "📝".bright_yellow(),
             "File changed:".bright_white(),
@@ -59,7 +64,8 @@ impl UI {
     /// Print a restart notification
     pub fn restarting() {
         let timestamp = Self::timestamp();
-        println!("{} {} {}", 
+        println!(
+            "{} {} {}",
             timestamp.bright_black(),
             "🔄".bright_magenta(),
             "Restarting...".bright_white()
@@ -68,20 +74,52 @@ impl UI {
 
     /// Print server start message
     pub fn server_start(watching: &str, command: &str) {
-        println!("\n{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".bright_black());
-        println!("{} {}", "🔍".bright_cyan(), "Starting dev server".bright_white().bold());
-        println!("{} {}", "   Watching:".bright_black(), watching.bright_white());
-        println!("{} {}", "   Command:".bright_black(), command.bright_white());
-        println!("{} {}", "   Press".bright_black(), "Ctrl+C".bright_red().bold());
-        println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".bright_black());
+        println!(
+            "\n{}",
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".bright_black()
+        );
+        println!(
+            "{} {}",
+            "🔍".bright_cyan(),
+            "Starting dev server".bright_white().bold()
+        );
+        println!(
+            "{} {}",
+            "   Watching:".bright_black(),
+            watching.bright_white()
+        );
+        println!(
+            "{} {}",
+            "   Command:".bright_black(),
+            command.bright_white()
+        );
+        println!(
+            "{} {}",
+            "   Press".bright_black(),
+            "Ctrl+C".bright_red().bold()
+        );
+        println!(
+            "{}",
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".bright_black()
+        );
         println!();
     }
 
     /// Print server stop message
     pub fn server_stop() {
-        println!("\n{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".bright_black());
-        println!("{} {}", "🛑".bright_red(), "Stopping dev server".bright_white().bold());
-        println!("{}", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".bright_black());
+        println!(
+            "\n{}",
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".bright_black()
+        );
+        println!(
+            "{} {}",
+            "🛑".bright_red(),
+            "Stopping dev server".bright_white().bold()
+        );
+        println!(
+            "{}",
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".bright_black()
+        );
     }
 
     /// Clear the screen
@@ -104,4 +142,3 @@ impl UI {
         format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
     }
 }
-

@@ -1,14 +1,14 @@
 use lpm::cache::Cache;
 use lpm::config::Config;
-use lpm::core::{LpmError, LpmResult};
 use lpm::core::path::find_project_root;
+use lpm::core::version::parse_constraint;
+use lpm::core::version::Version;
+use lpm::core::{LpmError, LpmResult};
 use lpm::luarocks::client::LuaRocksClient;
 use lpm::luarocks::manifest::Manifest;
+use lpm::luarocks::version::normalize_luarocks_version;
 use lpm::package::lockfile::Lockfile;
 use lpm::package::manifest::PackageManifest;
-use lpm::core::version::parse_constraint;
-use lpm::luarocks::version::normalize_luarocks_version;
-use lpm::core::version::Version;
 use std::env;
 
 pub async fn run() -> LpmResult<()> {
@@ -46,16 +46,30 @@ pub async fn run() -> LpmResult<()> {
             .and_then(|lf| lf.get_package(name))
             .and_then(|pkg| Version::parse(&pkg.version).ok());
 
-        match check_outdated(&client, &luarocks_manifest, name, version_constraint, current_version.as_ref()).await {
+        match check_outdated(
+            &client,
+            &luarocks_manifest,
+            name,
+            version_constraint,
+            current_version.as_ref(),
+        )
+        .await
+        {
             Ok(OutdatedStatus::UpToDate) => {
                 up_to_date_count += 1;
             }
             Ok(OutdatedStatus::Outdated { current, latest }) => {
                 outdated_count += 1;
                 if let Some(current) = current {
-                    println!("  ⚠️  {}: {} → {} (constraint: {})", name, current, latest, version_constraint);
+                    println!(
+                        "  ⚠️  {}: {} → {} (constraint: {})",
+                        name, current, latest, version_constraint
+                    );
                 } else {
-                    println!("  ⚠️  {}: (not installed) → {} (constraint: {})", name, latest, version_constraint);
+                    println!(
+                        "  ⚠️  {}: (not installed) → {} (constraint: {})",
+                        name, latest, version_constraint
+                    );
                 }
             }
             Ok(OutdatedStatus::NotFound) => {
@@ -74,16 +88,30 @@ pub async fn run() -> LpmResult<()> {
             .and_then(|lf| lf.get_package(name))
             .and_then(|pkg| Version::parse(&pkg.version).ok());
 
-        match check_outdated(&client, &luarocks_manifest, name, version_constraint, current_version.as_ref()).await {
+        match check_outdated(
+            &client,
+            &luarocks_manifest,
+            name,
+            version_constraint,
+            current_version.as_ref(),
+        )
+        .await
+        {
             Ok(OutdatedStatus::UpToDate) => {
                 up_to_date_count += 1;
             }
             Ok(OutdatedStatus::Outdated { current, latest }) => {
                 outdated_count += 1;
                 if let Some(current) = current {
-                    println!("  ⚠️  {}: {} → {} (constraint: {}, dev)", name, current, latest, version_constraint);
+                    println!(
+                        "  ⚠️  {}: {} → {} (constraint: {}, dev)",
+                        name, current, latest, version_constraint
+                    );
                 } else {
-                    println!("  ⚠️  {}: (not installed) → {} (constraint: {}, dev)", name, latest, version_constraint);
+                    println!(
+                        "  ⚠️  {}: (not installed) → {} (constraint: {}, dev)",
+                        name, latest, version_constraint
+                    );
                 }
             }
             Ok(OutdatedStatus::NotFound) => {
@@ -108,7 +136,10 @@ pub async fn run() -> LpmResult<()> {
 
 enum OutdatedStatus {
     UpToDate,
-    Outdated { current: Option<Version>, latest: Version },
+    Outdated {
+        current: Option<Version>,
+        latest: Version,
+    },
     NotFound,
 }
 

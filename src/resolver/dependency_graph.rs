@@ -1,5 +1,5 @@
-use crate::core::{LpmError, LpmResult};
 use crate::core::version::{Version, VersionConstraint};
+use crate::core::{LpmError, LpmResult};
 use std::collections::{HashMap, HashSet};
 
 /// A node in the dependency graph
@@ -176,7 +176,7 @@ mod tests {
         graph.add_node("a".to_string(), parse_constraint("^1.0.0").unwrap());
         graph.add_node("b".to_string(), parse_constraint("^2.0.0").unwrap());
         graph.add_dependency("a", "b".to_string()).unwrap();
-        
+
         let node = graph.get_node("a").unwrap();
         assert_eq!(node.dependencies.len(), 1);
         assert_eq!(node.dependencies[0], "b");
@@ -208,4 +208,3 @@ mod tests {
         assert!(cycles.unwrap().is_empty());
     }
 }
-

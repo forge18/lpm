@@ -1,5 +1,5 @@
-use lpm::core::LpmResult;
 use lpm::core::path::find_project_root;
+use lpm::core::LpmResult;
 use lpm::path_setup::{LuaRunner, RunOptions};
 use std::env;
 

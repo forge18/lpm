@@ -1,5 +1,5 @@
-use crate::core::LpmResult;
 use crate::core::path::lua_modules_dir;
+use crate::core::LpmResult;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -8,7 +8,7 @@ pub struct PathSetup;
 
 impl PathSetup {
     /// Generate the lpm.loader module content
-    /// 
+    ///
     /// This generates version-aware loader code that works with both
     /// Lua 5.1 (package.loaders) and Lua 5.2+ (package.searchers)
     pub fn generate_loader(project_root: &Path) -> String {
@@ -17,10 +17,7 @@ impl PathSetup {
 
         // Generate platform-specific cpath extension
         let cpath_extension = if cfg!(target_os = "windows") {
-            format!(
-                "{}/?.dll;{}/?/init.dll",
-                lua_modules_str, lua_modules_str
-            )
+            format!("{}/?.dll;{}/?/init.dll", lua_modules_str, lua_modules_str)
         } else if cfg!(target_os = "macos") {
             format!(
                 "{}/?.dylib;{}/?/init.dylib",
@@ -28,10 +25,7 @@ impl PathSetup {
             )
         } else {
             // Linux and other Unix-like systems
-            format!(
-                "{}/?.so;{}/?/init.so",
-                lua_modules_str, lua_modules_str
-            )
+            format!("{}/?.so;{}/?/init.so", lua_modules_str, lua_modules_str)
         };
 
         format!(
@@ -86,9 +80,7 @@ return {{
 
     /// Get the path to the installed loader module
     pub fn loader_path(project_root: &Path) -> PathBuf {
-        lua_modules_dir(project_root)
-            .join("lpm")
-            .join("loader.lua")
+        lua_modules_dir(project_root).join("lpm").join("loader.lua")
     }
 
     /// Get the directory containing the lpm module
@@ -106,7 +98,7 @@ mod tests {
     fn test_generate_loader() {
         let temp = TempDir::new().unwrap();
         let loader = PathSetup::generate_loader(temp.path());
-        
+
         assert!(loader.contains("package.path"));
         assert!(loader.contains("package.cpath"));
         assert!(loader.contains("lua_modules"));
@@ -116,9 +108,8 @@ mod tests {
     fn test_install_loader() {
         let temp = TempDir::new().unwrap();
         PathSetup::install_loader(temp.path()).unwrap();
-        
+
         let loader_path = PathSetup::loader_path(temp.path());
         assert!(loader_path.exists());
     }
 }
-

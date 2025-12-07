@@ -1,8 +1,8 @@
 use clap::{Parser, Subcommand};
 use lpm_core::LpmError;
 
-mod bundler;
 mod bundle;
+mod bundler;
 
 #[derive(Parser)]
 #[command(name = "lpm-bundle")]
@@ -19,31 +19,31 @@ enum BundleCommands {
         /// Entry point file (default: src/main.lua)
         #[arg(short, long)]
         entry: Option<String>,
-        
+
         /// Output file (default: dist/bundle.lua)
         #[arg(short, long)]
         output: Option<String>,
-        
+
         /// Minify output (strip whitespace, comments)
         #[arg(short, long)]
         minify: bool,
-        
+
         /// Generate source map
         #[arg(short, long)]
         source_map: bool,
-        
+
         /// Strip comments (but don't minify)
         #[arg(long)]
         no_comments: bool,
-        
+
         /// Enable tree-shaking (remove unused code)
         #[arg(long)]
         tree_shake: bool,
-        
+
         /// Track dynamic requires (runtime analysis)
         #[arg(long)]
         dynamic_requires: bool,
-        
+
         /// Incremental bundling (only rebuild changed modules)
         #[arg(long)]
         incremental: bool,
@@ -53,19 +53,19 @@ enum BundleCommands {
         /// Entry point file (default: src/main.lua)
         #[arg(short, long)]
         entry: Option<String>,
-        
+
         /// Output file (default: dist/bundle.lua)
         #[arg(short, long)]
         output: Option<String>,
-        
+
         /// Minify output
         #[arg(short, long)]
         minify: bool,
-        
+
         /// Generate source map
         #[arg(short, long)]
         source_map: bool,
-        
+
         /// Enable tree-shaking
         #[arg(long)]
         tree_shake: bool,
@@ -80,15 +80,15 @@ fn main() -> Result<(), LpmError> {
     eprintln!("   - C modules cannot be bundled");
     eprintln!("   - Minifier is basic and may not work for all code");
     eprintln!();
-    
+
     let cli = Cli::parse();
-    
+
     match cli.command {
-        BundleCommands::Bundle { 
-            entry, 
-            output, 
-            minify, 
-            source_map, 
+        BundleCommands::Bundle {
+            entry,
+            output,
+            minify,
+            source_map,
             no_comments,
             tree_shake,
             dynamic_requires,
@@ -113,9 +113,6 @@ fn main() -> Result<(), LpmError> {
             minify,
             source_map,
             tree_shake,
-        } => {
-            bundle::run_watch(entry, output, minify, source_map, tree_shake)
-        }
+        } => bundle::run_watch(entry, output, minify, source_map, tree_shake),
     }
 }
-

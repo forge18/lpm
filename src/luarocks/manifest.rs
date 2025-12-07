@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// LuaRocks manifest structure
-/// 
+///
 /// The manifest is a Lua table that maps package names to version information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Manifest {
@@ -36,7 +36,7 @@ struct ArchInfo {
 
 impl Manifest {
     /// Parse manifest from JSON format (LuaRocks API)
-    /// 
+    ///
     /// The LuaRocks manifest API returns JSON with structure:
     /// {
     ///   "repository": {
@@ -48,27 +48,27 @@ impl Manifest {
     pub fn parse_json(content: &str) -> LpmResult<Self> {
         let json: ManifestJson = serde_json::from_str(content)
             .map_err(|e| LpmError::Package(format!("Failed to parse manifest JSON: {}", e)))?;
-        
+
         // The JSON structure is: {"repository": {"package_name": {"version": [...]}}}
         // So json.repository is already the packages map
         let repository_name = "luarocks".to_string(); // Default repository name
-        
+
         // Convert JSON structure to Manifest structure
         let mut packages = HashMap::new();
         for (package_name, versions_map) in &json.repository {
             let mut package_versions = Vec::new();
-            
+
             for (version_str, arch_infos) in versions_map {
                 // Check if this version has a rockspec
                 let has_rockspec = arch_infos.iter().any(|ai| ai.arch == "rockspec");
-                
+
                 if has_rockspec {
                     // Construct rockspec URL
                     let rockspec_url = format!(
                         "https://luarocks.org/manifests/{}/{}-{}.rockspec",
                         repository_name, package_name, version_str
                     );
-                    
+
                     // Archive URL will be extracted from rockspec when downloaded
                     package_versions.push(PackageVersion {
                         version: version_str.clone(),
@@ -77,18 +77,18 @@ impl Manifest {
                     });
                 }
             }
-            
+
             if !package_versions.is_empty() {
                 packages.insert(package_name.clone(), package_versions);
             }
         }
-        
+
         Ok(Manifest {
             repository: repository_name,
             packages,
         })
     }
-    
+
     /// Parse manifest from Lua table format (legacy, not implemented)
     pub fn parse_lua(_content: &str) -> LpmResult<Self> {
         Err(LpmError::NotImplemented(
@@ -146,7 +146,7 @@ mod tests {
                 }
             }
         }"#;
-        
+
         let manifest = Manifest::parse_json(json).unwrap();
         assert_eq!(manifest.repository, "luarocks");
         assert!(manifest.packages.contains_key("test-package"));
@@ -164,23 +164,26 @@ mod tests {
     #[test]
     fn test_manifest_get_package_versions() {
         let mut manifest = Manifest::default();
-        let mut versions = Vec::new();
-        versions.push(PackageVersion {
-            version: "1.0.0".to_string(),
-            rockspec_url: "https://example.com/test-1.0.0.rockspec".to_string(),
-            archive_url: Some("https://example.com/test-1.0.0.tar.gz".to_string()),
-        });
-        versions.push(PackageVersion {
-            version: "2.0.0".to_string(),
-            rockspec_url: "https://example.com/test-2.0.0.rockspec".to_string(),
-            archive_url: None,
-        });
-        manifest.packages.insert("test-package".to_string(), versions);
-        
+        let versions = vec![
+            PackageVersion {
+                version: "1.0.0".to_string(),
+                rockspec_url: "https://example.com/test-1.0.0.rockspec".to_string(),
+                archive_url: Some("https://example.com/test-1.0.0.tar.gz".to_string()),
+            },
+            PackageVersion {
+                version: "2.0.0".to_string(),
+                rockspec_url: "https://example.com/test-2.0.0.rockspec".to_string(),
+                archive_url: None,
+            },
+        ];
+        manifest
+            .packages
+            .insert("test-package".to_string(), versions);
+
         let versions = manifest.get_package_versions("test-package");
         assert!(versions.is_some());
         assert_eq!(versions.unwrap().len(), 2);
-        
+
         let none = manifest.get_package_versions("nonexistent");
         assert!(none.is_none());
     }
@@ -188,19 +191,22 @@ mod tests {
     #[test]
     fn test_manifest_get_latest_version() {
         let mut manifest = Manifest::default();
-        let mut versions = Vec::new();
-        versions.push(PackageVersion {
-            version: "1.0.0".to_string(),
-            rockspec_url: "https://example.com/test-1.0.0.rockspec".to_string(),
-            archive_url: None,
-        });
-        versions.push(PackageVersion {
-            version: "2.0.0".to_string(),
-            rockspec_url: "https://example.com/test-2.0.0.rockspec".to_string(),
-            archive_url: None,
-        });
-        manifest.packages.insert("test-package".to_string(), versions);
-        
+        let versions = vec![
+            PackageVersion {
+                version: "1.0.0".to_string(),
+                rockspec_url: "https://example.com/test-1.0.0.rockspec".to_string(),
+                archive_url: None,
+            },
+            PackageVersion {
+                version: "2.0.0".to_string(),
+                rockspec_url: "https://example.com/test-2.0.0.rockspec".to_string(),
+                archive_url: None,
+            },
+        ];
+        manifest
+            .packages
+            .insert("test-package".to_string(), versions);
+
         let latest = manifest.get_latest_version("test-package");
         assert!(latest.is_some());
         assert_eq!(latest.unwrap().version, "2.0.0");
@@ -209,24 +215,27 @@ mod tests {
     #[test]
     fn test_manifest_get_package_version_strings() {
         let mut manifest = Manifest::default();
-        let mut versions = Vec::new();
-        versions.push(PackageVersion {
-            version: "1.0.0".to_string(),
-            rockspec_url: "https://example.com/test-1.0.0.rockspec".to_string(),
-            archive_url: None,
-        });
-        versions.push(PackageVersion {
-            version: "2.0.0".to_string(),
-            rockspec_url: "https://example.com/test-2.0.0.rockspec".to_string(),
-            archive_url: None,
-        });
-        manifest.packages.insert("test-package".to_string(), versions);
-        
+        let versions = vec![
+            PackageVersion {
+                version: "1.0.0".to_string(),
+                rockspec_url: "https://example.com/test-1.0.0.rockspec".to_string(),
+                archive_url: None,
+            },
+            PackageVersion {
+                version: "2.0.0".to_string(),
+                rockspec_url: "https://example.com/test-2.0.0.rockspec".to_string(),
+                archive_url: None,
+            },
+        ];
+        manifest
+            .packages
+            .insert("test-package".to_string(), versions);
+
         let version_strings = manifest.get_package_version_strings("test-package");
         assert_eq!(version_strings.len(), 2);
         assert!(version_strings.contains(&"1.0.0".to_string()));
         assert!(version_strings.contains(&"2.0.0".to_string()));
-        
+
         let empty = manifest.get_package_version_strings("nonexistent");
         assert!(empty.is_empty());
     }
@@ -241,4 +250,3 @@ mod tests {
         }
     }
 }
-

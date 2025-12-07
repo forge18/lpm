@@ -1,5 +1,5 @@
-use crate::bundler::resolver::DependencyResolver;
 use crate::bundler::minifier::Minifier;
+use crate::bundler::resolver::DependencyResolver;
 use crate::bundler::tree_shaker::TreeShaker;
 use lpm_core::{LpmError, LpmResult};
 use std::collections::HashMap;
@@ -80,11 +80,8 @@ impl Bundler {
         }
 
         // 1. Resolve all dependencies
-        let mut resolver = DependencyResolver::new(
-            &self.root,
-            &self.options.module_paths,
-        );
-        
+        let mut resolver = DependencyResolver::new(&self.root, &self.options.module_paths);
+
         let modules = resolver.resolve(&self.entry)?;
         println!("   Found {} modules", modules.len());
 
@@ -106,7 +103,7 @@ impl Bundler {
 
         // 3. Read and process each module
         let mut bundled_modules: HashMap<String, String> = HashMap::new();
-        
+
         for (module_name, content) in modules_to_bundle {
             let processed = if self.options.minify {
                 let minifier = Minifier::new();
@@ -116,7 +113,7 @@ impl Bundler {
             } else {
                 content
             };
-            
+
             bundled_modules.insert(module_name.clone(), processed);
         }
 
@@ -125,9 +122,13 @@ impl Bundler {
 
         // 5. Write output
         fs::write(&self.output, bundle)?;
-        
+
         let size = fs::metadata(&self.output)?.len();
-        println!("✓ Bundle created: {} ({} bytes)", self.output.display(), size);
+        println!(
+            "✓ Bundle created: {} ({} bytes)",
+            self.output.display(),
+            size
+        );
 
         // 6. Generate source map if requested
         if self.options.source_map {
@@ -176,7 +177,9 @@ impl Bundler {
                 if let Ok(entries) = fs::read_dir(module_path) {
                     for entry in entries.flatten() {
                         let path = entry.path();
-                        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("lua") {
+                        if path.is_file()
+                            && path.extension().and_then(|s| s.to_str()) == Some("lua")
+                        {
                             if let Ok(file_mtime) = fs::metadata(&path)?.modified() {
                                 if let Some(output_mtime) = output_mtime {
                                     if file_mtime > output_mtime {
@@ -207,7 +210,10 @@ impl Bundler {
             bundle.push_str(&format!("\n-- Module: {}\n", name));
             // Escape single quotes in module name for safety
             let escaped_name = name.replace("'", "\\'");
-            bundle.push_str(&format!("_BUNDLER_RUNTIME.modules['{}'] = function()\n", escaped_name));
+            bundle.push_str(&format!(
+                "_BUNDLER_RUNTIME.modules['{}'] = function()\n",
+                escaped_name
+            ));
             bundle.push_str(&content);
             bundle.push_str("\nend\n");
         }
@@ -257,19 +263,20 @@ __BUNDLER__ = _BUNDLER_RUNTIME
     }
 
     fn get_entry_module_name(&self) -> LpmResult<String> {
-        let rel_path = self.entry.strip_prefix(&self.root)
-            .map_err(|_| LpmError::Path(format!(
+        let rel_path = self.entry.strip_prefix(&self.root).map_err(|_| {
+            LpmError::Path(format!(
                 "Entry path {} is not within project root {}",
                 self.entry.display(),
                 self.root.display()
-            )))?;
-        
+            ))
+        })?;
+
         let module_name = rel_path
             .to_string_lossy()
             .replace(".lua", "")
             .replace("/", ".")
             .replace("\\", ".");
-        
+
         Ok(module_name)
     }
 
@@ -296,10 +303,9 @@ __BUNDLER__ = _BUNDLER_RUNTIME
         let map_json = serde_json::to_string_pretty(&map)
             .map_err(|e| LpmError::Package(format!("Failed to serialize source map: {}", e)))?;
         fs::write(&map_path, map_json)?;
-        
+
         println!("   Source map: {}", map_path.display());
-        
+
         Ok(())
     }
 }
-

@@ -1,12 +1,12 @@
-use crate::core::{LpmError, LpmResult};
-use crate::build::targets::Target;
 use crate::build::builder::RustBuilder;
+use crate::build::targets::Target;
+use crate::core::{LpmError, LpmResult};
 use crate::package::manifest::PackageManifest;
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 
 /// Packages built Rust-compiled Lua native module binaries
-/// 
+///
 /// These are dynamic libraries (.so/.dylib/.dll) compiled from Rust code
 /// that are part of Lua module packages, not standalone Rust libraries.
 pub struct BinaryPackager {
@@ -31,16 +31,16 @@ impl BinaryPackager {
         let binary_path = rt.block_on(builder.build(Some(target)))?;
 
         // Create package directory
-        let package_name = format!("{}-{}-{}", 
-            self.manifest.name,
-            self.manifest.version,
-            target.triple
+        let package_name = format!(
+            "{}-{}-{}",
+            self.manifest.name, self.manifest.version, target.triple
         );
         let package_dir = self.project_root.join("dist").join(&package_name);
         fs::create_dir_all(&package_dir)?;
 
         // Copy binary to package directory
-        let binary_name = binary_path.file_name()
+        let binary_name = binary_path
+            .file_name()
             .ok_or_else(|| LpmError::Package("Invalid binary path".to_string()))?;
         let dest_binary = package_dir.join(binary_name);
         fs::copy(&binary_path, &dest_binary)?;
@@ -89,7 +89,15 @@ generated_at: "{}"
     /// Create an archive (tar.gz on Unix, zip on Windows)
     fn create_archive(&self, package_dir: &Path, package_name: &str) -> LpmResult<PathBuf> {
         let dist_dir = package_dir.parent().unwrap();
-        let archive_name = format!("{}.{}", package_name, if cfg!(target_os = "windows") { "zip" } else { "tar.gz" });
+        let archive_name = format!(
+            "{}.{}",
+            package_name,
+            if cfg!(target_os = "windows") {
+                "zip"
+            } else {
+                "tar.gz"
+            }
+        );
         let archive_path = dist_dir.join(&archive_name);
 
         if cfg!(target_os = "windows") {
@@ -116,7 +124,9 @@ generated_at: "{}"
             .status()?;
 
         if !status.success() {
-            return Err(LpmError::Package("Failed to create zip archive. Install 'zip' command.".to_string()));
+            return Err(LpmError::Package(
+                "Failed to create zip archive. Install 'zip' command.".to_string(),
+            ));
         }
 
         Ok(())
@@ -135,7 +145,9 @@ generated_at: "{}"
             .status()?;
 
         if !status.success() {
-            return Err(LpmError::Package("Failed to create tar.gz archive. Install 'tar' command.".to_string()));
+            return Err(LpmError::Package(
+                "Failed to create tar.gz archive. Install 'tar' command.".to_string(),
+            ));
         }
 
         Ok(())
@@ -170,4 +182,3 @@ generated_at: "{}"
         Ok(results)
     }
 }
-

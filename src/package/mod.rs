@@ -25,7 +25,6 @@ pub use installer::PackageInstaller;
 pub use lockfile::Lockfile;
 pub use lockfile_builder::LockfileBuilder;
 pub use manifest::PackageManifest;
-pub use rollback::{RollbackManager, with_rollback};
+pub use rollback::{with_rollback, RollbackManager};
 pub use validator::ManifestValidator;
 pub use verifier::{PackageVerifier, VerificationResult};
-

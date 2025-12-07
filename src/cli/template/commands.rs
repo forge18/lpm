@@ -36,8 +36,8 @@ fn list_templates(search_query: Option<String>) -> LpmResult<()> {
     if let Some(query) = &search_query {
         let query_lower = query.to_lowercase();
         templates.retain(|t| {
-            t.name.to_lowercase().contains(&query_lower) ||
-            t.description.to_lowercase().contains(&query_lower)
+            t.name.to_lowercase().contains(&query_lower)
+                || t.description.to_lowercase().contains(&query_lower)
         });
     }
 
@@ -49,7 +49,10 @@ fn list_templates(search_query: Option<String>) -> LpmResult<()> {
         }
         println!("\nTemplates can be:");
         println!("  - Built-in templates (in LPM installation)");
-        println!("  - User templates (in {})", TemplateDiscovery::user_templates_dir()?.display());
+        println!(
+            "  - User templates (in {})",
+            TemplateDiscovery::user_templates_dir()?.display()
+        );
         println!("\nCreate a template with: lpm template create <name>");
         println!("Search templates with: lpm template list --search <query>");
         return Ok(());
@@ -128,14 +131,21 @@ variables:
     );
     fs::write(template_dir.join("template.yaml"), template_yaml)?;
 
-    println!("✓ Created template '{}' at {}", name, template_dir.display());
+    println!(
+        "✓ Created template '{}' at {}",
+        name,
+        template_dir.display()
+    );
     println!("\nTemplate files copied from current project.");
     println!("Edit template.yaml to customize template variables.");
 
     Ok(())
 }
 
-fn copy_template_files(source: &std::path::Path, target: &std::path::Path) -> lpm_core::LpmResult<()> {
+fn copy_template_files(
+    source: &std::path::Path,
+    target: &std::path::Path,
+) -> lpm_core::LpmResult<()> {
     use std::fs;
     use walkdir::WalkDir;
 
@@ -154,13 +164,14 @@ fn copy_template_files(source: &std::path::Path, target: &std::path::Path) -> lp
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
         // Skip ignored directories and files
-        !ignore_patterns.iter().any(|pattern| {
-            name.contains(pattern) || path.to_string_lossy().contains(pattern)
-        })
+        !ignore_patterns
+            .iter()
+            .any(|pattern| name.contains(pattern) || path.to_string_lossy().contains(pattern))
     }) {
         let entry = entry?;
         let source_path = entry.path();
-        let relative_path = source_path.strip_prefix(source)
+        let relative_path = source_path
+            .strip_prefix(source)
             .map_err(|e| lpm_core::LpmError::Path(format!("Failed to get relative path: {}", e)))?;
         let target_path = target.join(relative_path);
 
@@ -181,4 +192,3 @@ fn copy_template_files(source: &std::path::Path, target: &std::path::Path) -> lp
 
     Ok(())
 }
-

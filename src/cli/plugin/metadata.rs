@@ -64,7 +64,9 @@ impl PluginMetadata {
     /// Get metadata file path for a plugin
     pub fn metadata_path(plugin_name: &str) -> LpmResult<PathBuf> {
         let lpm_home = lpm_core::core::path::lpm_home()?;
-        Ok(lpm_home.join("plugins").join(format!("{}.yaml", plugin_name)))
+        Ok(lpm_home
+            .join("plugins")
+            .join(format!("{}.yaml", plugin_name)))
     }
 }
 
@@ -121,19 +123,14 @@ impl PluginInfo {
     fn get_executable_version(executable_path: &Path) -> LpmResult<Option<String>> {
         use std::process::Command;
 
-        let output = Command::new(executable_path)
-            .arg("--version")
-            .output();
+        let output = Command::new(executable_path).arg("--version").output();
 
         match output {
             Ok(output) if output.status.success() => {
-                let version = String::from_utf8_lossy(&output.stdout)
-                    .trim()
-                    .to_string();
+                let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
                 Ok(Some(version))
             }
             _ => Ok(None),
         }
     }
 }
-

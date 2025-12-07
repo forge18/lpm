@@ -1,7 +1,7 @@
 use lpm::build::builder::RustBuilder;
 use lpm::build::targets::Target;
-use lpm::core::{LpmError, LpmResult};
 use lpm::core::path::find_project_root;
+use lpm::core::{LpmError, LpmResult};
 use lpm::package::manifest::PackageManifest;
 use std::env;
 
@@ -29,11 +29,11 @@ pub fn run(target: Option<String>, all_targets: bool) -> LpmResult<()> {
         // We need to handle this differently
         let mut results = Vec::new();
         let rt = tokio::runtime::Runtime::new().unwrap();
-        
+
         for target_triple in lpm::build::targets::SUPPORTED_TARGETS {
             let target = Target::new(target_triple)?;
             eprintln!("Building for target: {}", target.triple);
-            
+
             match rt.block_on(builder.build(Some(&target))) {
                 Ok(path) => {
                     results.push((target, path));
@@ -44,13 +44,13 @@ pub fn run(target: Option<String>, all_targets: bool) -> LpmResult<()> {
                 }
             }
         }
-        
+
         if results.is_empty() {
             return Err(LpmError::Package(
                 "Failed to build for all targets".to_string(),
             ));
         }
-        
+
         eprintln!("\n✓ Build complete for {} target(s):", results.len());
         for (target, path) in &results {
             eprintln!("  {} -> {}", target.triple, path.display());

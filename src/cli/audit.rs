@@ -1,5 +1,5 @@
-use lpm::core::{LpmError, LpmResult};
 use lpm::core::path::find_project_root;
+use lpm::core::{LpmError, LpmResult};
 use lpm::package::lockfile::Lockfile;
 use lpm::security::audit::format_report;
 use lpm::security::osv::OsvApi;
@@ -15,7 +15,7 @@ pub async fn run() -> LpmResult<()> {
     // Load lockfile
     let lockfile = Lockfile::load(&project_root)?
         .ok_or_else(|| LpmError::Package("No lockfile. Run 'lpm install' first".to_string()))?;
-    
+
     println!("Running security audit...");
     println!("  Querying OSV (Open Source Vulnerabilities) database...");
     println!();
@@ -24,7 +24,7 @@ pub async fn run() -> LpmResult<()> {
     let osv = OsvApi::new();
     let mut report = VulnerabilityReport::new();
     report.package_count = lockfile.packages.len();
-    
+
     for (name, locked_pkg) in &lockfile.packages {
         println!("Checking {}@{}", name, locked_pkg.version);
         let vulns = osv.query_package(name, &locked_pkg.version).await?;
@@ -33,7 +33,7 @@ pub async fn run() -> LpmResult<()> {
         }
         report.checked_packages += 1;
     }
-    
+
     // Display results
     let output = format_report(&report);
     print!("{}", output);
@@ -45,4 +45,3 @@ pub async fn run() -> LpmResult<()> {
 
     Ok(())
 }
-

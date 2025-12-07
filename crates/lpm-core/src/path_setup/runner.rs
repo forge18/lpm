@@ -1,5 +1,5 @@
-use crate::core::{LpmError, LpmResult};
 use crate::core::path::{find_project_root, lua_modules_dir};
+use crate::core::{LpmError, LpmResult};
 use crate::path_setup::loader::PathSetup;
 use std::path::Path;
 use std::process::Command;
@@ -40,15 +40,14 @@ impl LuaRunner {
 
         // Build Lua command
         let mut cmd = Command::new(&lua_binary);
-        
+
         // Add lpm.loader require before the script
         // The loader is installed at lua_modules/lpm/loader.lua
         let lpm_dir = lua_modules.join("lpm");
-        cmd.arg("-e")
-            .arg(format!(
-                "package.path = '{}' .. '/?.lua;' .. package.path; require('lpm.loader')",
-                lpm_dir.to_string_lossy()
-            ));
+        cmd.arg("-e").arg(format!(
+            "package.path = '{}' .. '/?.lua;' .. package.path; require('lpm.loader')",
+            lpm_dir.to_string_lossy()
+        ));
 
         // Add script path
         cmd.arg(script_path);
@@ -84,7 +83,7 @@ impl LuaRunner {
     }
 
     /// Execute a command string with correct LUA_PATH and LUA_CPATH setup
-    /// 
+    ///
     /// This is the main entry point for running scripts and commands.
     /// It automatically sets up package.path and package.cpath for the command.
     pub fn exec_command(command_str: &str, options: RunOptions) -> LpmResult<i32> {
@@ -123,7 +122,7 @@ impl LuaRunner {
         // Build command
         let mut cmd = Command::new(&actual_program);
         cmd.args(args);
-        
+
         // Set working directory
         if let Some(cwd) = &options.cwd {
             cmd.current_dir(cwd);
@@ -132,7 +131,11 @@ impl LuaRunner {
         }
 
         // Set up LUA_PATH and LUA_CPATH for Lua commands
-        if program == "lua" || program == "luajit" || program.ends_with("lua") || program.ends_with("luajit") {
+        if program == "lua"
+            || program == "luajit"
+            || program.ends_with("lua")
+            || program.ends_with("luajit")
+        {
             let lua_path = format!(
                 "{}/?.lua;{}/?/init.lua;{}/?/?.lua;",
                 lua_modules.to_string_lossy(),
@@ -191,15 +194,14 @@ impl LuaRunner {
 
         // Build Lua command
         let mut cmd = Command::new(&lua_binary);
-        
+
         // Add lpm.loader require
         let lpm_dir = lua_modules.join("lpm");
-        cmd.arg("-e")
-            .arg(format!(
-                "package.path = '{}' .. '/?.lua;' .. package.path; require('lpm.loader'); {}",
-                lpm_dir.to_string_lossy(),
-                lua_code
-            ));
+        cmd.arg("-e").arg(format!(
+            "package.path = '{}' .. '/?.lua;' .. package.path; require('lpm.loader'); {}",
+            lpm_dir.to_string_lossy(),
+            lua_code
+        ));
 
         // Set working directory
         if let Some(cwd) = &options.cwd {
@@ -228,7 +230,7 @@ impl LuaRunner {
 }
 
 /// Get the path to LPM-managed Lua binary, respecting .lua-version files
-/// 
+///
 /// Note: In lpm-core, this is a simplified version that doesn't use lua_manager.
 /// It will always return an error, causing the code to fall back to system Lua.
 /// For full LPM-managed Lua support, use the main lpm crate.
@@ -236,15 +238,15 @@ fn get_lpm_lua_binary(_binary: &str, _project_root: &Path) -> LpmResult<std::pat
     // In lpm-core, we don't have access to lua_manager, so always return error
     // This causes the code to fall back to system PATH Lua
     Err(LpmError::Package(
-        "LPM-managed Lua not available in lpm-core. Using system Lua.".to_string()
+        "LPM-managed Lua not available in lpm-core. Using system Lua.".to_string(),
     ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_run_script_structure() {
@@ -257,4 +259,3 @@ mod tests {
         assert!(result.is_err());
     }
 }
-

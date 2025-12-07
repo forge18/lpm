@@ -1,17 +1,17 @@
-use crate::core::{LpmError, LpmResult};
 use crate::core::version::Version;
+use crate::core::{LpmError, LpmResult};
 
 /// Normalize LuaRocks version format to SemVer
-/// 
+///
 /// LuaRocks uses format like "3.0-1" where:
 /// - "3.0" is the version
 /// - "-1" is the rockspec revision
-/// 
+///
 /// LPM converts this to "3.0.1" (SemVer format)
 pub fn normalize_luarocks_version(luarocks_version: &str) -> LpmResult<Version> {
     // Split on '-' to separate version from revision
     let parts: Vec<&str> = luarocks_version.split('-').collect();
-    
+
     if parts.is_empty() {
         return Err(LpmError::Version(format!(
             "Invalid LuaRocks version format: {}",
@@ -28,7 +28,7 @@ pub fn normalize_luarocks_version(luarocks_version: &str) -> LpmResult<Version> 
 
     // Parse the version part
     let mut version = Version::parse(version_str)?;
-    
+
     // If revision > 0, add it as patch version
     // If version already has patch, we increment it
     if revision > 0 {
@@ -71,4 +71,3 @@ mod tests {
         assert_eq!(v.patch, 0);
     }
 }
-

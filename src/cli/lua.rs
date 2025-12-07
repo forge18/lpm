@@ -1,6 +1,6 @@
 use clap::Subcommand;
-use lpm::core::{LpmError, LpmResult};
 use lpm::core::path::lpm_home;
+use lpm::core::{LpmError, LpmResult};
 use lpm::lua_manager::{LuaDownloader, VersionSwitcher, WrapperGenerator};
 use std::env;
 use std::path::Path;
@@ -115,7 +115,9 @@ async fn install(lpm_home: &Path, cache_dir: &Path, version: &str) -> LpmResult<
 
     // Download binaries
     let lua_binary = downloader.download_binary(&resolved_version, "lua").await?;
-    let luac_binary = downloader.download_binary(&resolved_version, "luac").await?;
+    let luac_binary = downloader
+        .download_binary(&resolved_version, "luac")
+        .await?;
 
     // Install to versions directory
     let install_dir = lpm_home.join("versions").join(&resolved_version);
@@ -232,9 +234,7 @@ fn uninstall(lpm_home: &Path, version: &str) -> LpmResult<()> {
 
 fn exec(lpm_home: &Path, version: &str, command: Vec<String>) -> LpmResult<()> {
     if command.is_empty() {
-        return Err(LpmError::Package(
-            "No command provided".to_string(),
-        ));
+        return Err(LpmError::Package("No command provided".to_string()));
     }
 
     let version_dir = lpm_home.join("versions").join(version);
@@ -247,10 +247,7 @@ fn exec(lpm_home: &Path, version: &str, command: Vec<String>) -> LpmResult<()> {
         )));
     }
 
-    let status = Command::new(&lua_bin)
-        .args(&command)
-        .status()?;
+    let status = Command::new(&lua_bin).args(&command).status()?;
 
     std::process::exit(status.code().unwrap_or(1));
 }
-

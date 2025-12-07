@@ -9,4 +9,3 @@ pub use client::LuaRocksClient;
 pub use manifest::Manifest;
 pub use rockspec::Rockspec;
 pub use search_api::SearchAPI;
-

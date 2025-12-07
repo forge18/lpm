@@ -1,7 +1,7 @@
 use crate::cache::Cache;
 use crate::config::Config;
-use crate::core::{LpmError, LpmResult};
 use crate::core::version::{Version, VersionConstraint};
+use crate::core::{LpmError, LpmResult};
 use crate::luarocks::client::LuaRocksClient;
 use crate::luarocks::manifest::Manifest;
 use crate::luarocks::rockspec::Rockspec;
@@ -20,7 +20,7 @@ impl DependencyResolver {
     }
 
     /// Resolve all dependencies from a package manifest
-    /// 
+    ///
     /// This implements a simplified SemVer resolution algorithm:
     /// 1. Build dependency graph
     /// 2. For each package, find all available versions
@@ -36,8 +36,10 @@ impl DependencyResolver {
 
         // Build initial graph from direct dependencies
         for (name, constraint_str) in dependencies {
-            let constraint = crate::core::version::parse_constraint(constraint_str)
-                .map_err(|e| LpmError::Version(format!("Invalid constraint for {}: {}", name, e)))?;
+            let constraint =
+                crate::core::version::parse_constraint(constraint_str).map_err(|e| {
+                    LpmError::Version(format!("Invalid constraint for {}: {}", name, e))
+                })?;
             graph.add_node(name.clone(), constraint);
         }
 
@@ -51,8 +53,9 @@ impl DependencyResolver {
         let mut to_process: Vec<(String, VersionConstraint)> = dependencies
             .iter()
             .map(|(n, v)| {
-                let constraint = crate::core::version::parse_constraint(v)
-                    .map_err(|e| LpmError::Version(format!("Invalid constraint for {}: {}", n, e)))?;
+                let constraint = crate::core::version::parse_constraint(v).map_err(|e| {
+                    LpmError::Version(format!("Invalid constraint for {}: {}", n, e))
+                })?;
                 Ok((n.clone(), constraint))
             })
             .collect::<LpmResult<Vec<_>>>()?;
@@ -80,20 +83,30 @@ impl DependencyResolver {
             resolved.insert(package_name.clone(), selected_version.clone());
 
             // Get rockspec and parse dependencies
-            let rockspec = get_rockspec(&client, &search_api, &package_name, &selected_version.to_string()).await?;
-            
+            let rockspec = get_rockspec(
+                &client,
+                &search_api,
+                &package_name,
+                &selected_version.to_string(),
+            )
+            .await?;
+
             for dep in &rockspec.dependencies {
                 // Skip lua runtime dependency (standardize: any dep starting with "lua" and containing version operators)
-                if dep.trim().starts_with("lua") && 
-                   (dep.contains(">=") || dep.contains(">") || dep.contains("==") || dep.contains("~>")) {
+                if dep.trim().starts_with("lua")
+                    && (dep.contains(">=")
+                        || dep.contains(">")
+                        || dep.contains("==")
+                        || dep.contains("~>"))
+                {
                     continue;
                 }
-                
+
                 // Parse dependency string: "luasocket >= 3.0" or "penlight" or "luasocket ~> 3.0"
                 let (dep_name, dep_constraint) = parse_dependency_string(dep)?;
-                
+
                 graph.add_dependency(&package_name, dep_name.clone())?;
-                
+
                 if !resolved.contains_key(&dep_name) {
                     to_process.push((dep_name, dep_constraint));
                 }
@@ -110,14 +123,14 @@ impl DependencyResolver {
     fn get_available_versions(&self, package_name: &str) -> LpmResult<Vec<Version>> {
         // Get versions from manifest
         let version_strings = self.manifest.get_package_version_strings(package_name);
-        
+
         if version_strings.is_empty() {
             return Err(LpmError::Package(format!(
                 "Package '{}' not found in manifest",
                 package_name
             )));
         }
-        
+
         let mut versions = Vec::new();
         for version_str in version_strings {
             // Normalize LuaRocks version format
@@ -187,25 +200,28 @@ impl DependencyResolver {
 /// Handles formats like: "luasocket >= 3.0", "penlight", "luasocket ~> 3.0"
 fn parse_dependency_string(dep: &str) -> LpmResult<(String, VersionConstraint)> {
     let dep = dep.trim();
-    
+
     // Find first whitespace or version operator
     if let Some(pos) = dep.find(char::is_whitespace) {
         let name = dep[..pos].trim().to_string();
         let version_part = dep[pos..].trim();
-        
+
         // Convert LuaRocks ~> to SemVer ^
         let version_part = if version_part.starts_with("~>") {
             version_part.replacen("~>", "^", 1)
         } else {
             version_part.to_string()
         };
-        
+
         let constraint = crate::core::version::parse_constraint(&version_part)
             .unwrap_or(VersionConstraint::GreaterOrEqual(Version::new(0, 0, 0)));
         Ok((name, constraint))
     } else {
         // No version specified
-        Ok((dep.to_string(), VersionConstraint::GreaterOrEqual(Version::new(0, 0, 0))))
+        Ok((
+            dep.to_string(),
+            VersionConstraint::GreaterOrEqual(Version::new(0, 0, 0)),
+        ))
     }
 }
 
@@ -258,4 +274,3 @@ mod tests {
         assert!(result.is_err()); // Expected since we don't have versions
     }
 }
-

@@ -48,10 +48,7 @@ impl RollbackManager {
 }
 
 /// Execute a function with automatic rollback on error
-pub fn with_rollback<F, T>(
-    project_root: &Path,
-    f: F,
-) -> LpmResult<T>
+pub fn with_rollback<F, T>(project_root: &Path, f: F) -> LpmResult<T>
 where
     F: FnOnce() -> LpmResult<T>,
 {
@@ -77,10 +74,7 @@ where
 }
 
 /// Execute an async function with automatic rollback on error
-pub async fn with_rollback_async<F, Fut, T>(
-    project_root: &Path,
-    f: F,
-) -> LpmResult<T>
+pub async fn with_rollback_async<F, Fut, T>(project_root: &Path, f: F) -> LpmResult<T>
 where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = LpmResult<T>>,
@@ -109,8 +103,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use crate::package::manifest::PackageManifest;
+    use tempfile::TempDir;
 
     #[test]
     fn test_rollback_manager() {
@@ -122,4 +116,3 @@ mod tests {
         assert!(rollback.has_backup());
     }
 }
-

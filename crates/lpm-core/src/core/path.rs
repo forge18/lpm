@@ -2,7 +2,7 @@ use crate::core::error::{LpmError, LpmResult};
 use std::path::{Path, PathBuf};
 
 /// Get the LPM home directory
-/// 
+///
 /// Platform-specific locations:
 /// - Windows: %APPDATA%\lpm
 /// - Linux: ~/.config/lpm
@@ -14,7 +14,7 @@ pub fn lpm_home() -> LpmResult<PathBuf> {
 }
 
 /// Get the cache directory
-/// 
+///
 /// Platform-specific locations:
 /// - Windows: %LOCALAPPDATA%\lpm\cache
 /// - Linux: ~/.cache/lpm
@@ -26,7 +26,7 @@ pub fn cache_dir() -> LpmResult<PathBuf> {
 }
 
 /// Get the config file path
-/// 
+///
 /// Platform-specific locations:
 /// - Windows: %APPDATA%\lpm\config.yaml
 /// - Linux: ~/.config/lpm/config.yaml
@@ -36,12 +36,12 @@ pub fn config_file() -> LpmResult<PathBuf> {
 }
 
 /// Get the credentials file path (deprecated - use CredentialStore instead)
-/// 
+///
 /// Platform-specific locations:
 /// - Windows: %APPDATA%\lpm\credentials
 /// - Linux: ~/.config/lpm/credentials
 /// - macOS: ~/Library/Application Support/lpm/credentials
-/// 
+///
 /// Note: LPM uses OS keychain for credential storage. This path is kept
 /// for compatibility but should not be used. If any credential files exist,
 /// they should have 0600 permissions.
@@ -65,7 +65,7 @@ pub fn packages_metadata_dir(project_root: &Path) -> PathBuf {
 }
 
 /// Get the global installation directory
-/// 
+///
 /// Platform-specific locations:
 /// - Windows: %APPDATA%\lpm\global
 /// - Linux: ~/.config/lpm/global
@@ -80,7 +80,7 @@ pub fn global_lua_modules_dir() -> LpmResult<PathBuf> {
 }
 
 /// Get the global bin directory (for executables)
-/// 
+///
 /// This is the same as ~/.lpm/bin/ (where Lua wrappers are)
 pub fn global_bin_dir() -> LpmResult<PathBuf> {
     Ok(lpm_home()?.join("bin"))
@@ -92,7 +92,7 @@ pub fn global_packages_metadata_dir() -> LpmResult<PathBuf> {
 }
 
 /// Find the project root by looking for package.yaml or workspace.yaml
-/// 
+///
 /// Checks for workspace.yaml first, then falls back to package.yaml.
 /// Workspace detection is done by checking for workspace.yaml file or
 /// package.yaml with workspace configuration.
@@ -124,7 +124,8 @@ pub fn find_project_root(start: &Path) -> LpmResult<PathBuf> {
             current = parent.to_path_buf();
         } else {
             return Err(LpmError::Path(
-                "Could not find package.yaml or workspace.yaml in current directory or parents".to_string(),
+                "Could not find package.yaml or workspace.yaml in current directory or parents"
+                    .to_string(),
             ));
         }
     }
@@ -176,4 +177,3 @@ mod tests {
         assert!(dir.is_dir());
     }
 }
-

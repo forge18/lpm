@@ -4,20 +4,20 @@
 //! from `lpm-core` and organizing additional modules for package management,
 //! LuaRocks integration, and related features.
 
-pub use lpm_core::{LpmError, LpmResult, CredentialStore, ErrorHelp, format_error_with_help};
-pub use lpm_core::path_setup::{LuaRunner, RunOptions, PathSetup};
 pub use lpm_core::package::manifest::PackageManifest;
+pub use lpm_core::path_setup::{LuaRunner, PathSetup, RunOptions};
+pub use lpm_core::{format_error_with_help, CredentialStore, ErrorHelp, LpmError, LpmResult};
 
 /// Core module re-exported for backward compatibility.
 pub mod core {
-    pub use lpm_core::*;
     pub use lpm_core::core::*;
-    
+    pub use lpm_core::*;
+
     /// Path module re-exported from lpm-core.
     pub mod path {
         pub use lpm_core::core::path::*;
     }
-    
+
     /// Path setup for LPM binary (not Lua paths).
     pub mod path_setup;
 }
@@ -59,4 +59,3 @@ pub mod lua_manager;
 
 /// Publishing packages.
 pub mod publish;
-

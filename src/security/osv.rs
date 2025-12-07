@@ -1,5 +1,5 @@
 use crate::core::{LpmError, LpmResult};
-use crate::security::vulnerability::{Vulnerability, Severity};
+use crate::security::vulnerability::{Severity, Vulnerability};
 use serde::{Deserialize, Serialize};
 
 /// Client for querying OSV (Open Source Vulnerabilities) API
@@ -55,7 +55,7 @@ impl OsvApi {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     /// Query OSV API for vulnerabilities in a package version
     /// Returns empty vector if no vulnerabilities found or on API errors (non-fatal)
     pub async fn query_package(&self, name: &str, version: &str) -> LpmResult<Vec<Vulnerability>> {
@@ -67,49 +67,63 @@ impl OsvApi {
             },
             version: version.to_string(),
         };
-        
+
         let url = format!("{}/v1/query", self.base_url);
-        let response = self.client
+        let response = self
+            .client
             .post(url)
             .json(&query)
             .send()
             .await
             .map_err(LpmError::Http)?;
-        
+
         // Non-200 responses mean no vulnerabilities (or API issue - treat as none)
         if !response.status().is_success() {
             return Ok(Vec::new());
         }
-        
-        let osv_response: OsvResponse = response.json().await
+
+        let osv_response: OsvResponse = response
+            .json()
+            .await
             .map_err(|e| LpmError::LuaRocks(format!("OSV parse error: {}", e)))?;
-        
-        Ok(osv_response.vulns.into_iter().map(|v| {
-            // Parse severity from OSV response (use highest if multiple)
-            let severity = v.severity.iter()
-                .find(|s| s.severity_type == "CVSS_V3")
-                .or_else(|| v.severity.first())
-                .and_then(|s| {
-                    s.score.parse::<f64>().ok().map(|score| {
-                        if score >= 9.0 { Severity::Critical }
-                        else if score >= 7.0 { Severity::High }
-                        else if score >= 4.0 { Severity::Medium }
-                        else { Severity::Low }
+
+        Ok(osv_response
+            .vulns
+            .into_iter()
+            .map(|v| {
+                // Parse severity from OSV response (use highest if multiple)
+                let severity = v
+                    .severity
+                    .iter()
+                    .find(|s| s.severity_type == "CVSS_V3")
+                    .or_else(|| v.severity.first())
+                    .and_then(|s| {
+                        s.score.parse::<f64>().ok().map(|score| {
+                            if score >= 9.0 {
+                                Severity::Critical
+                            } else if score >= 7.0 {
+                                Severity::High
+                            } else if score >= 4.0 {
+                                Severity::Medium
+                            } else {
+                                Severity::Low
+                            }
+                        })
                     })
-                })
-                .unwrap_or(Severity::Medium);
-            
-            Vulnerability {
-                package: name.to_string(),
-                affected_versions: version.to_string(),
-                severity,
-                title: v.summary,
-                description: v.details,
-                cve: Some(v.id),
-                fixed_in: None,
-                references: Vec::new(),
-            }
-        }).collect())
+                    .unwrap_or(Severity::Medium);
+
+                Vulnerability {
+                    package: name.to_string(),
+                    affected_versions: version.to_string(),
+                    severity,
+                    title: v.summary,
+                    description: v.details,
+                    cve: Some(v.id),
+                    fixed_in: None,
+                    references: Vec::new(),
+                }
+            })
+            .collect())
     }
 }
 
@@ -138,11 +152,10 @@ mod tests {
             },
             version: "1.0.0".to_string(),
         };
-        
+
         let json = serde_json::to_string(&query).unwrap();
         assert!(json.contains("test-package"));
         assert!(json.contains("1.0.0"));
         assert!(json.contains("LuaRocks"));
     }
 }
-

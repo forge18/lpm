@@ -1,6 +1,6 @@
 use crate::cache::Cache;
 use crate::core::{LpmError, LpmResult};
-use crate::package::lockfile::{Lockfile, LockedPackage};
+use crate::package::lockfile::{LockedPackage, Lockfile};
 use std::path::Path;
 
 /// Verifies package checksums against the lockfile
@@ -14,9 +14,13 @@ impl PackageVerifier {
     }
 
     /// Verify all packages in the lockfile match their checksums
-    pub fn verify_all(&self, lockfile: &Lockfile, project_root: &Path) -> LpmResult<VerificationResult> {
+    pub fn verify_all(
+        &self,
+        lockfile: &Lockfile,
+        project_root: &Path,
+    ) -> LpmResult<VerificationResult> {
         let mut result = VerificationResult::new();
-        
+
         for (name, package) in &lockfile.packages {
             match self.verify_package(name, package, project_root) {
                 Ok(()) => result.add_success(name.clone()),
@@ -36,7 +40,7 @@ impl PackageVerifier {
     ) -> LpmResult<()> {
         // Extract checksum from lockfile (format: "sha256:...")
         let expected_checksum = &package.checksum;
-        
+
         if !expected_checksum.starts_with("sha256:") {
             return Err(LpmError::Package(format!(
                 "Invalid checksum format for '{}': expected 'sha256:...'",
@@ -147,8 +151,8 @@ impl Default for VerificationResult {
 mod tests {
     use super::*;
     use crate::cache::Cache;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_verify_file_success() {
@@ -172,9 +176,9 @@ mod tests {
         let test_file = temp.path().join("test.txt");
         fs::write(&test_file, b"test data").unwrap();
 
-        let wrong_checksum = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+        let wrong_checksum =
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000";
         let result = verifier.verify_file(&test_file, wrong_checksum);
         assert!(result.is_err());
     }
 }
-

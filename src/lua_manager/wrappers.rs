@@ -171,4 +171,3 @@ impl WrapperGenerator {
         }
     }
 }
-

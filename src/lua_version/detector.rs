@@ -28,7 +28,7 @@ impl LuaVersion {
     }
 
     /// Parse a version string from `lua -v` output
-    /// 
+    ///
     /// Handles formats like:
     /// - "Lua 5.4.6"
     /// - "Lua 5.3.6"
@@ -36,11 +36,14 @@ impl LuaVersion {
     pub fn parse(version_str: &str) -> LpmResult<Self> {
         // Remove "Lua" prefix and whitespace
         let version_str = version_str.trim();
-        let version_str = version_str.strip_prefix("Lua").map(|s| s.trim()).unwrap_or(version_str);
+        let version_str = version_str
+            .strip_prefix("Lua")
+            .map(|s| s.trim())
+            .unwrap_or(version_str);
 
         // Parse version parts (e.g., "5.4.6" -> major=5, minor=4, patch=6)
         let parts: Vec<&str> = version_str.split('.').collect();
-        
+
         if parts.is_empty() {
             return Err(LpmError::Version(format!(
                 "Invalid Lua version format: '{}'",
@@ -52,15 +55,9 @@ impl LuaVersion {
             .parse()
             .map_err(|_| LpmError::Version(format!("Invalid major version: '{}'", parts[0])))?;
 
-        let minor = parts
-            .get(1)
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
+        let minor = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
 
-        let patch = parts
-            .get(2)
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
+        let patch = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
 
         // Validate it's a supported Lua version (5.1, 5.3, or 5.4)
         if major != 5 || (minor != 1 && minor != 3 && minor != 4) {
@@ -123,15 +120,9 @@ pub struct LuaVersionDetector;
 impl LuaVersionDetector {
     /// Detect the installed Lua version by running `lua -v`
     pub fn detect() -> LpmResult<LuaVersion> {
-        let output = Command::new("lua")
-            .arg("-v")
-            .output()
-            .map_err(|e| {
-                LpmError::Version(format!(
-                    "Failed to run 'lua -v': {}. Is Lua installed?",
-                    e
-                ))
-            })?;
+        let output = Command::new("lua").arg("-v").output().map_err(|e| {
+            LpmError::Version(format!("Failed to run 'lua -v': {}. Is Lua installed?", e))
+        })?;
 
         if !output.status.success() {
             return Err(LpmError::Version(
@@ -139,8 +130,9 @@ impl LuaVersionDetector {
             ));
         }
 
-        let stdout = str::from_utf8(&output.stdout)
-            .map_err(|e| LpmError::Version(format!("Invalid UTF-8 in Lua version output: {}", e)))?;
+        let stdout = str::from_utf8(&output.stdout).map_err(|e| {
+            LpmError::Version(format!("Invalid UTF-8 in Lua version output: {}", e))
+        })?;
 
         // Parse first line (version info is usually on first line)
         let first_line = stdout.lines().next().unwrap_or("").trim();
@@ -148,18 +140,13 @@ impl LuaVersionDetector {
     }
 
     /// Detect Lua version with a specific command
-    /// 
+    ///
     /// Useful for testing or when Lua is installed with a different name
     pub fn detect_with_command(command: &str) -> LpmResult<LuaVersion> {
         let output = Command::new(command)
             .arg("-v")
             .output()
-            .map_err(|e| {
-                LpmError::Version(format!(
-                    "Failed to run '{} -v': {}",
-                    command, e
-                ))
-            })?;
+            .map_err(|e| LpmError::Version(format!("Failed to run '{} -v': {}", command, e)))?;
 
         if !output.status.success() {
             return Err(LpmError::Version(format!(
@@ -168,8 +155,9 @@ impl LuaVersionDetector {
             )));
         }
 
-        let stdout = str::from_utf8(&output.stdout)
-            .map_err(|e| LpmError::Version(format!("Invalid UTF-8 in Lua version output: {}", e)))?;
+        let stdout = str::from_utf8(&output.stdout).map_err(|e| {
+            LpmError::Version(format!("Invalid UTF-8 in Lua version output: {}", e))
+        })?;
 
         let first_line = stdout.lines().next().unwrap_or("").trim();
         LuaVersion::parse(first_line)
@@ -228,4 +216,3 @@ mod tests {
         assert!(LuaVersion::parse("Lua 6.0.0").is_err());
     }
 }
-

@@ -6,5 +6,4 @@ pub mod version;
 
 pub use credentials::CredentialStore;
 pub use error::{LpmError, LpmResult};
-pub use error_help::{ErrorHelp, format_error_with_help};
-
+pub use error_help::{format_error_with_help, ErrorHelp};

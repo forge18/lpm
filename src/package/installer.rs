@@ -1,10 +1,10 @@
 use crate::cache::Cache;
 use crate::config::Config;
+use crate::core::path::{ensure_dir, lpm_metadata_dir, lua_modules_dir, packages_metadata_dir};
 use crate::core::{LpmError, LpmResult};
-use crate::core::path::{lua_modules_dir, ensure_dir, lpm_metadata_dir, packages_metadata_dir};
 use crate::luarocks::client::LuaRocksClient;
-use crate::luarocks::search_api::SearchAPI;
 use crate::luarocks::rockspec::Rockspec;
+use crate::luarocks::search_api::SearchAPI;
 use crate::package::extractor::PackageExtractor;
 use crate::package::lockfile::Lockfile;
 use std::fs;
@@ -56,21 +56,21 @@ impl PackageInstaller {
     /// Install a package
     pub async fn install_package(&self, name: &str, version: &str) -> LpmResult<PathBuf> {
         println!("Installing {}@{}", name, version);
-        
+
         // Step 1: Construct and verify rockspec URL
         println!("  Fetching package info...");
         let rockspec_url = self.search_api.get_rockspec_url(name, version, None);
         self.search_api.verify_rockspec_url(&rockspec_url).await?;
-        
+
         // Step 2: Download and parse rockspec to get build configuration
         println!("  Downloading rockspec...");
         let rockspec_content = self.client.download_rockspec(&rockspec_url).await?;
         let rockspec = self.client.parse_rockspec(&rockspec_content)?;
-        
+
         // Step 3: Download source archive
         println!("  Downloading source...");
         let source_path = self.client.download_source(&rockspec.source.url).await?;
-        
+
         // Step 4: Verify checksum if lockfile exists (ensures reproducible installs)
         if let Some(lockfile) = Lockfile::load(&self.project_root)? {
             if let Some(locked_pkg) = lockfile.get_package(name) {
@@ -85,24 +85,29 @@ impl PackageInstaller {
                 println!("  ✓ Checksum verified");
             }
         }
-        
+
         // Step 5: Extract source archive to temporary directory
         println!("  Extracting...");
         let extracted_path = self.extractor.extract(&source_path)?;
-        
+
         // Step 6: Build and install based on rockspec build type
         println!("  Installing...");
         self.install_from_source(&extracted_path, name, &rockspec)?;
-        
+
         // Step 7: Calculate checksum for lockfile generation
         let checksum = Cache::checksum(&source_path)?;
-        
+
         println!("  ✓ Installed {} (checksum: {})", name, checksum);
-        
+
         Ok(self.lua_modules.join(name))
     }
-    
-    fn install_from_source(&self, source_path: &Path, package_name: &str, rockspec: &Rockspec) -> LpmResult<()> {
+
+    fn install_from_source(
+        &self,
+        source_path: &Path,
+        package_name: &str,
+        rockspec: &Rockspec,
+    ) -> LpmResult<()> {
         match rockspec.build.build_type.as_str() {
             "none" | "builtin" => {
                 // Pure Lua modules: copy files directly without building.
@@ -130,57 +135,64 @@ impl PackageInstaller {
             ))),
         }
     }
-    
-    fn build_with_make(&self, source_path: &Path, package_name: &str, rockspec: &Rockspec) -> LpmResult<()> {
+
+    fn build_with_make(
+        &self,
+        source_path: &Path,
+        package_name: &str,
+        rockspec: &Rockspec,
+    ) -> LpmResult<()> {
         use std::process::Command;
-        
+
         println!("  Building with make...");
-        
+
         let mut make_cmd = Command::new("make");
         make_cmd.current_dir(source_path);
-        
-        let status = make_cmd.status()
+
+        let status = make_cmd
+            .status()
             .map_err(|e| LpmError::Package(format!("Failed to run make: {}", e)))?;
-        
+
         if !status.success() {
             return Err(LpmError::Package("make build failed".to_string()));
         }
-        
+
         // Install using make install (if install target exists) or copy built files
         let dest = self.lua_modules.join(package_name);
         fs::create_dir_all(&dest)?;
-        
+
         // Attempt make install first, fall back to manual file copying if needed
         let mut install_cmd = Command::new("make");
         install_cmd.arg("install");
         install_cmd.current_dir(source_path);
         install_cmd.env("PREFIX", &dest);
-        
+
         if install_cmd.status().is_ok() {
             println!("  ✓ Installed via make install");
             return Ok(());
         }
-        
+
         // Fall back to copying files based on rockspec.build.install or build.modules.
         // Handle install table sections: bin, lua, lib, conf.
-        let has_install = !rockspec.build.install.bin.is_empty() 
+        let has_install = !rockspec.build.install.bin.is_empty()
             || !rockspec.build.install.lua.is_empty()
             || !rockspec.build.install.lib.is_empty()
             || !rockspec.build.install.conf.is_empty();
-            
+
         if has_install {
             // Copy files from install.bin (executables).
             for source_path_str in rockspec.build.install.bin.values() {
                 let src = source_path.join(source_path_str);
                 if src.exists() {
-                    let relative = src.strip_prefix(source_path)
+                    let relative = src
+                        .strip_prefix(source_path)
                         .map_err(|e| LpmError::Path(e.to_string()))?;
                     let dst = dest.join(relative);
-                    
+
                     if let Some(parent) = dst.parent() {
                         fs::create_dir_all(parent)?;
                     }
-                    
+
                     if src.is_dir() {
                         copy_dir_recursive(&src, &dst)?;
                     } else {
@@ -188,19 +200,20 @@ impl PackageInstaller {
                     }
                 }
             }
-            
+
             // Copy files from install.lua (Lua modules).
             for source_path_str in rockspec.build.install.lua.values() {
                 let src = source_path.join(source_path_str);
                 if src.exists() {
-                    let relative = src.strip_prefix(source_path)
+                    let relative = src
+                        .strip_prefix(source_path)
                         .map_err(|e| LpmError::Path(e.to_string()))?;
                     let dst = dest.join(relative);
-                    
+
                     if let Some(parent) = dst.parent() {
                         fs::create_dir_all(parent)?;
                     }
-                    
+
                     if src.is_dir() {
                         copy_dir_recursive(&src, &dst)?;
                     } else {
@@ -208,35 +221,37 @@ impl PackageInstaller {
                     }
                 }
             }
-            
+
             // Copy files from install.lib (native libraries).
             for source_path_str in rockspec.build.install.lib.values() {
                 let src = source_path.join(source_path_str);
                 if src.exists() {
-                    let relative = src.strip_prefix(source_path)
+                    let relative = src
+                        .strip_prefix(source_path)
                         .map_err(|e| LpmError::Path(e.to_string()))?;
                     let dst = dest.join(relative);
-                    
+
                     if let Some(parent) = dst.parent() {
                         fs::create_dir_all(parent)?;
                     }
-                    
+
                     fs::copy(&src, &dst)?;
                 }
             }
-            
+
             // Copy files from install.conf (configuration files).
             for source_path_str in rockspec.build.install.conf.values() {
                 let src = source_path.join(source_path_str);
                 if src.exists() {
-                    let relative = src.strip_prefix(source_path)
+                    let relative = src
+                        .strip_prefix(source_path)
                         .map_err(|e| LpmError::Path(e.to_string()))?;
                     let dst = dest.join(relative);
-                    
+
                     if let Some(parent) = dst.parent() {
                         fs::create_dir_all(parent)?;
                     }
-                    
+
                     if src.is_dir() {
                         copy_dir_recursive(&src, &dst)?;
                     } else {
@@ -249,10 +264,11 @@ impl PackageInstaller {
             for source_file in rockspec.build.modules.values() {
                 let src = source_path.join(source_file);
                 if src.exists() {
-                    let relative = src.strip_prefix(source_path)
+                    let relative = src
+                        .strip_prefix(source_path)
                         .map_err(|e| LpmError::Path(e.to_string()))?;
                     let dst = dest.join(relative);
-                    
+
                     if let Some(parent) = dst.parent() {
                         fs::create_dir_all(parent)?;
                     }
@@ -263,77 +279,85 @@ impl PackageInstaller {
             // Copy everything as fallback.
             copy_dir_recursive(source_path, &dest)?;
         }
-        
+
         println!("  ✓ Installed built package");
         Ok(())
     }
-    
-    fn build_with_cmake(&self, source_path: &Path, package_name: &str, rockspec: &Rockspec) -> LpmResult<()> {
+
+    fn build_with_cmake(
+        &self,
+        source_path: &Path,
+        package_name: &str,
+        rockspec: &Rockspec,
+    ) -> LpmResult<()> {
         use std::process::Command;
-        
+
         println!("  Building with cmake...");
-        
+
         // Create build directory for CMake.
         let build_dir = source_path.join("build");
         fs::create_dir_all(&build_dir)?;
-        
+
         // Run cmake configure step.
         let mut cmake_cmd = Command::new("cmake");
         cmake_cmd.arg("..");
         cmake_cmd.current_dir(&build_dir);
-        
-        let status = cmake_cmd.status()
+
+        let status = cmake_cmd
+            .status()
             .map_err(|e| LpmError::Package(format!("Failed to run cmake: {}", e)))?;
-        
+
         if !status.success() {
             return Err(LpmError::Package("cmake configure failed".to_string()));
         }
-        
+
         // Run cmake build step.
         let mut build_cmd = Command::new("cmake");
         build_cmd.args(["--build", "."]);
         build_cmd.current_dir(&build_dir);
-        
-        let status = build_cmd.status()
+
+        let status = build_cmd
+            .status()
             .map_err(|e| LpmError::Package(format!("Failed to run cmake build: {}", e)))?;
-        
+
         if !status.success() {
             return Err(LpmError::Package("cmake build failed".to_string()));
         }
-        
+
         // Install built files to destination.
         let dest = self.lua_modules.join(package_name);
         fs::create_dir_all(&dest)?;
-        
+
         // Attempt cmake install first.
         let mut install_cmd = Command::new("cmake");
         install_cmd.args(["--install", ".", "--prefix", dest.to_str().unwrap()]);
         install_cmd.current_dir(&build_dir);
-        
+
         if install_cmd.status().is_ok() {
             println!("  ✓ Installed via cmake install");
             return Ok(());
         }
-        
+
         // Fall back to copying from build directory.
-        let has_install = !rockspec.build.install.bin.is_empty() 
+        let has_install = !rockspec.build.install.bin.is_empty()
             || !rockspec.build.install.lua.is_empty()
             || !rockspec.build.install.lib.is_empty()
             || !rockspec.build.install.conf.is_empty();
-            
+
         if has_install {
             // Copy from install table sections.
             for source_path_str in rockspec.build.install.bin.values() {
                 let src = build_dir.join(source_path_str);
                 if src.exists() {
-                    let relative = src.strip_prefix(&build_dir)
+                    let relative = src
+                        .strip_prefix(&build_dir)
                         .map_err(|e| LpmError::Path(e.to_string()))?;
                     let dst = dest.join(relative);
-                    
+
                     if let Some(parent) = dst.parent() {
                         fs::create_dir_all(parent)?;
                     }
-                    
+
                     if src.is_dir() {
                         copy_dir_recursive(&src, &dst)?;
                     } else {
@@ -341,33 +365,35 @@ impl PackageInstaller {
                     }
                 }
             }
-            
+
             for source_path_str in rockspec.build.install.lua.values() {
                 let src = build_dir.join(source_path_str);
                 if src.exists() {
-                    let relative = src.strip_prefix(&build_dir)
+                    let relative = src
+                        .strip_prefix(&build_dir)
                         .map_err(|e| LpmError::Path(e.to_string()))?;
                     let dst = dest.join(relative);
-                    
+
                     if let Some(parent) = dst.parent() {
                         fs::create_dir_all(parent)?;
                     }
-                    
+
                     fs::copy(&src, &dst)?;
                 }
             }
-            
+
             for source_path_str in rockspec.build.install.lib.values() {
                 let src = build_dir.join(source_path_str);
                 if src.exists() {
-                    let relative = src.strip_prefix(&build_dir)
+                    let relative = src
+                        .strip_prefix(&build_dir)
                         .map_err(|e| LpmError::Path(e.to_string()))?;
                     let dst = dest.join(relative);
-                    
+
                     if let Some(parent) = dst.parent() {
                         fs::create_dir_all(parent)?;
                     }
-                    
+
                     fs::copy(&src, &dst)?;
                 }
             }
@@ -375,20 +401,25 @@ impl PackageInstaller {
             // Copy built files from build directory.
             copy_dir_recursive(&build_dir, &dest)?;
         }
-        
+
         println!("  ✓ Installed built package");
         Ok(())
     }
-    
-    fn build_with_command(&self, source_path: &Path, package_name: &str, rockspec: &Rockspec) -> LpmResult<()> {
+
+    fn build_with_command(
+        &self,
+        source_path: &Path,
+        package_name: &str,
+        rockspec: &Rockspec,
+    ) -> LpmResult<()> {
         use std::process::Command;
-        
+
         // For "command" build type, parse the command from rockspec.
         // LuaRocks stores it in build.variables or build.command.
         // This implementation checks for a common build.sh pattern.
-        
+
         println!("  Building with custom command...");
-        
+
         // Check for build script or command specification.
         // Full implementation would parse rockspec.build.variables.
         let build_script = source_path.join("build.sh");
@@ -396,41 +427,44 @@ impl PackageInstaller {
             let mut cmd = Command::new("sh");
             cmd.arg(&build_script);
             cmd.current_dir(source_path);
-            
-            let status = cmd.status()
+
+            let status = cmd
+                .status()
                 .map_err(|e| LpmError::Package(format!("Failed to run build script: {}", e)))?;
-            
+
             if !status.success() {
                 return Err(LpmError::Package("Custom build command failed".to_string()));
             }
         } else {
             return Err(LpmError::Package(
-                "command build type requires a build script or command specification in rockspec".to_string()
+                "command build type requires a build script or command specification in rockspec"
+                    .to_string(),
             ));
         }
-        
+
         // Install built files to destination.
         let dest = self.lua_modules.join(package_name);
         fs::create_dir_all(&dest)?;
-        
-        let has_install = !rockspec.build.install.bin.is_empty() 
+
+        let has_install = !rockspec.build.install.bin.is_empty()
             || !rockspec.build.install.lua.is_empty()
             || !rockspec.build.install.lib.is_empty()
             || !rockspec.build.install.conf.is_empty();
-            
+
         if has_install {
             // Copy from install table sections.
             for source_path_str in rockspec.build.install.bin.values() {
                 let src = source_path.join(source_path_str);
                 if src.exists() {
-                    let relative = src.strip_prefix(source_path)
+                    let relative = src
+                        .strip_prefix(source_path)
                         .map_err(|e| LpmError::Path(e.to_string()))?;
                     let dst = dest.join(relative);
-                    
+
                     if let Some(parent) = dst.parent() {
                         fs::create_dir_all(parent)?;
                     }
-                    
+
                     if src.is_dir() {
                         copy_dir_recursive(&src, &dst)?;
                     } else {
@@ -438,18 +472,19 @@ impl PackageInstaller {
                     }
                 }
             }
-            
+
             for source_path_str in rockspec.build.install.lua.values() {
                 let src = source_path.join(source_path_str);
                 if src.exists() {
-                    let relative = src.strip_prefix(source_path)
+                    let relative = src
+                        .strip_prefix(source_path)
                         .map_err(|e| LpmError::Path(e.to_string()))?;
                     let dst = dest.join(relative);
-                    
+
                     if let Some(parent) = dst.parent() {
                         fs::create_dir_all(parent)?;
                     }
-                    
+
                     fs::copy(&src, &dst)?;
                 }
             }
@@ -457,36 +492,42 @@ impl PackageInstaller {
             // Copy everything as fallback.
             copy_dir_recursive(source_path, &dest)?;
         }
-        
+
         println!("  ✓ Installed built package");
         Ok(())
     }
-    
-    fn build_with_rust(&self, source_path: &Path, package_name: &str, rockspec: &Rockspec) -> LpmResult<()> {
+
+    fn build_with_rust(
+        &self,
+        source_path: &Path,
+        package_name: &str,
+        rockspec: &Rockspec,
+    ) -> LpmResult<()> {
         use std::process::Command;
-        
+
         println!("  Building Rust extension...");
-        
+
         // Verify Cargo.toml exists (required for Rust builds).
         let cargo_toml = source_path.join("Cargo.toml");
         if !cargo_toml.exists() {
             return Err(LpmError::Package(
-                "Rust build type requires Cargo.toml in package source".to_string()
+                "Rust build type requires Cargo.toml in package source".to_string(),
             ));
         }
-        
+
         // Build with cargo in release mode.
         let mut build_cmd = Command::new("cargo");
         build_cmd.args(["build", "--release"]);
         build_cmd.current_dir(source_path);
-        
-        let status = build_cmd.status()
+
+        let status = build_cmd
+            .status()
             .map_err(|e| LpmError::Package(format!("Failed to run cargo build: {}", e)))?;
-        
+
         if !status.success() {
             return Err(LpmError::Package("cargo build failed".to_string()));
         }
-        
+
         // Find the built library in target/release/.
         // Look for platform-specific extensions: .so, .dylib, or .dll.
         let target_dir = source_path.join("target").join("release");
@@ -497,40 +538,43 @@ impl PackageInstaller {
         } else {
             "so"
         };
-        
+
         // Search for the built library file in target/release/.
         let lib_file = std::fs::read_dir(&target_dir)?
             .filter_map(|e| e.ok())
             .find(|e| {
-                e.path().extension()
+                e.path()
+                    .extension()
                     .and_then(|ext| ext.to_str())
                     .map(|ext| ext == lib_ext)
                     .unwrap_or(false)
             });
-        
+
         // Install built files to destination.
         let dest = self.lua_modules.join(package_name);
         fs::create_dir_all(&dest)?;
-        
+
         if let Some(lib_entry) = lib_file {
             // Copy the built library to destination.
             let lib_path = lib_entry.path();
-            let lib_name = lib_path.file_name()
+            let lib_name = lib_path
+                .file_name()
                 .ok_or_else(|| LpmError::Package("Invalid library path".to_string()))?;
             let dest_lib = dest.join(lib_name);
             fs::copy(&lib_path, &dest_lib)?;
             println!("  ✓ Copied library: {}", lib_name.to_string_lossy());
         }
-        
+
         // Copy Lua files if specified in modules.
         if !rockspec.build.modules.is_empty() {
             for source_file in rockspec.build.modules.values() {
                 let src = source_path.join(source_file);
                 if src.exists() {
-                    let relative = src.strip_prefix(source_path)
+                    let relative = src
+                        .strip_prefix(source_path)
                         .map_err(|e| LpmError::Path(e.to_string()))?;
                     let dst = dest.join(relative);
-                    
+
                     if let Some(parent) = dst.parent() {
                         fs::create_dir_all(parent)?;
                     }
@@ -538,68 +582,76 @@ impl PackageInstaller {
                 }
             }
         }
-        
+
         // Copy any other files specified in install table.
-        let has_install = !rockspec.build.install.bin.is_empty() 
+        let has_install = !rockspec.build.install.bin.is_empty()
             || !rockspec.build.install.lua.is_empty()
             || !rockspec.build.install.lib.is_empty()
             || !rockspec.build.install.conf.is_empty();
-            
+
         if has_install {
             for source_path_str in rockspec.build.install.bin.values() {
                 let src = source_path.join(source_path_str);
                 if src.exists() {
-                    let relative = src.strip_prefix(source_path)
+                    let relative = src
+                        .strip_prefix(source_path)
                         .map_err(|e| LpmError::Path(e.to_string()))?;
                     let dst = dest.join(relative);
-                    
+
                     if let Some(parent) = dst.parent() {
                         fs::create_dir_all(parent)?;
                     }
-                    
+
                     fs::copy(&src, &dst)?;
                 }
             }
-            
+
             for source_path_str in rockspec.build.install.lua.values() {
                 let src = source_path.join(source_path_str);
                 if src.exists() {
-                    let relative = src.strip_prefix(source_path)
+                    let relative = src
+                        .strip_prefix(source_path)
                         .map_err(|e| LpmError::Path(e.to_string()))?;
                     let dst = dest.join(relative);
-                    
+
                     if let Some(parent) = dst.parent() {
                         fs::create_dir_all(parent)?;
                     }
-                    
+
                     fs::copy(&src, &dst)?;
                 }
             }
-            
+
             for source_path_str in rockspec.build.install.lib.values() {
                 let src = source_path.join(source_path_str);
                 if src.exists() {
-                    let relative = src.strip_prefix(source_path)
+                    let relative = src
+                        .strip_prefix(source_path)
                         .map_err(|e| LpmError::Path(e.to_string()))?;
                     let dst = dest.join(relative);
-                    
+
                     if let Some(parent) = dst.parent() {
                         fs::create_dir_all(parent)?;
                     }
-                    
+
                     fs::copy(&src, &dst)?;
                 }
             }
         }
-        
+
         println!("  ✓ Installed Rust extension");
         Ok(())
     }
-    
-    fn install_builtin(&self, source_path: &Path, package_name: &str, rockspec: &Rockspec) -> LpmResult<()> {
+
+    fn install_builtin(
+        &self,
+        source_path: &Path,
+        package_name: &str,
+        rockspec: &Rockspec,
+    ) -> LpmResult<()> {
         let dest = self.lua_modules.join(package_name);
         fs::create_dir_all(&dest)?;
-        
+
         if rockspec.build.modules.is_empty() {
             // Copy everything (standard case for most packages).
             copy_dir_recursive(source_path, &dest)?;
@@ -613,18 +665,19 @@ impl PackageInstaller {
                         source_file
                     )));
                 }
-                
-                let relative = src.strip_prefix(source_path)
+
+                let relative = src
+                    .strip_prefix(source_path)
                     .map_err(|e| LpmError::Path(e.to_string()))?;
                 let dst = dest.join(relative);
-                
+
                 if let Some(parent) = dst.parent() {
                     fs::create_dir_all(parent)?;
                 }
                 fs::copy(&src, &dst)?;
             }
         }
-        
+
         Ok(())
     }
 
@@ -660,10 +713,11 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> LpmResult<()> {
     for entry in WalkDir::new(src) {
         let entry = entry?;
         let path = entry.path();
-        let relative = path.strip_prefix(src)
+        let relative = path
+            .strip_prefix(src)
             .map_err(|e| LpmError::Path(e.to_string()))?;
         let dest_path = dst.join(relative);
-        
+
         if entry.file_type().is_dir() {
             fs::create_dir_all(&dest_path)?;
         } else {
@@ -675,4 +729,3 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> LpmResult<()> {
     }
     Ok(())
 }
-

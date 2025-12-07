@@ -2,7 +2,7 @@ use crate::core::{LpmError, LpmResult};
 use crate::lua_version::detector::LuaVersion;
 
 /// Lua version constraint parser
-/// 
+///
 /// Supports:
 /// - Exact: "5.4"
 /// - Range: ">=5.1", "<5.3"
@@ -24,28 +24,22 @@ impl LuaVersionConstraint {
     /// Check if a Lua version satisfies this constraint
     pub fn matches(&self, version: &LuaVersion) -> bool {
         match self {
-            LuaVersionConstraint::Exact(v) => {
-                version.major == v.major && version.minor == v.minor
-            }
+            LuaVersionConstraint::Exact(v) => version.major == v.major && version.minor == v.minor,
             LuaVersionConstraint::GreaterOrEqual(v) => {
-                version.major > v.major
-                    || (version.major == v.major && version.minor >= v.minor)
+                version.major > v.major || (version.major == v.major && version.minor >= v.minor)
             }
             LuaVersionConstraint::LessThan(v) => {
-                version.major < v.major
-                    || (version.major == v.major && version.minor < v.minor)
+                version.major < v.major || (version.major == v.major && version.minor < v.minor)
             }
-            LuaVersionConstraint::Multiple(versions) => {
-                versions.iter().any(|v| {
-                    version.major == v.major && version.minor == v.minor
-                })
-            }
+            LuaVersionConstraint::Multiple(versions) => versions
+                .iter()
+                .any(|v| version.major == v.major && version.minor == v.minor),
         }
     }
 }
 
 /// Parse a Lua version constraint string
-/// 
+///
 /// Examples:
 /// - "5.4" -> Exact(5.4)
 /// - ">=5.1" -> GreaterOrEqual(5.1)
@@ -125,7 +119,10 @@ mod tests {
     #[test]
     fn test_parse_greater_or_equal() {
         let constraint = parse_lua_version_constraint(">=5.1").unwrap();
-        assert!(matches!(constraint, LuaVersionConstraint::GreaterOrEqual(_)));
+        assert!(matches!(
+            constraint,
+            LuaVersionConstraint::GreaterOrEqual(_)
+        ));
         assert!(constraint.matches(&LuaVersion::new(5, 1, 0)));
         assert!(constraint.matches(&LuaVersion::new(5, 3, 0)));
         assert!(constraint.matches(&LuaVersion::new(5, 4, 0)));
@@ -150,4 +147,3 @@ mod tests {
         assert!(!constraint.matches(&LuaVersion::new(5, 2, 0)));
     }
 }
-

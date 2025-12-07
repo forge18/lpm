@@ -6,8 +6,8 @@ pub mod registry;
 
 pub use metadata::PluginInfo;
 
-use lpm::core::{LpmError, LpmResult};
 use lpm::core::path::lpm_home;
+use lpm::core::{LpmError, LpmResult};
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -23,15 +23,18 @@ pub fn find_plugin(plugin_name: &str) -> Option<PathBuf> {
             return Some(plugin_path);
         }
     }
-    
+
     // Also check legacy ~/.lpm/bin/lpm-{name} for backwards compatibility
     if let Ok(home) = std::env::var("HOME") {
-        let legacy_path = PathBuf::from(home).join(".lpm").join("bin").join(format!("lpm-{}", plugin_name));
+        let legacy_path = PathBuf::from(home)
+            .join(".lpm")
+            .join("bin")
+            .join(format!("lpm-{}", plugin_name));
         if legacy_path.exists() {
             return Some(legacy_path);
         }
     }
-    
+
     // Check PATH for lpm-{name}
     which::which(format!("lpm-{}", plugin_name)).ok()
 }
@@ -89,7 +92,7 @@ pub(crate) fn list_plugins() -> LpmResult<Vec<PluginInfo>> {
 /// Execute a plugin with arguments
 pub fn run_plugin(plugin_name: &str, args: Vec<String>) -> LpmResult<()> {
     use crate::cli::plugin::config::PluginConfig;
-    
+
     if let Some(plugin_path) = find_plugin(plugin_name) {
         // Check if plugin is executable
         if !is_executable(&plugin_path) {
@@ -103,17 +106,19 @@ pub fn run_plugin(plugin_name: &str, args: Vec<String>) -> LpmResult<()> {
 
         // Load plugin configuration
         let config = PluginConfig::load(plugin_name)?;
-        
+
         // Set environment variables from config
         let mut cmd = Command::new(&plugin_path);
         cmd.args(args);
-        
+
         // Pass config settings as environment variables
         // Format: LPM_PLUGIN_<PLUGIN_NAME>_<KEY>=<value>
         for (key, value) in &config.settings {
-            let env_key = format!("LPM_PLUGIN_{}_{}", 
-                plugin_name.to_uppercase().replace("-", "_"), 
-                key.to_uppercase());
+            let env_key = format!(
+                "LPM_PLUGIN_{}_{}",
+                plugin_name.to_uppercase().replace("-", "_"),
+                key.to_uppercase()
+            );
             if let Some(str_val) = value.as_str() {
                 cmd.env(&env_key, str_val);
             } else if let Some(num_val) = value.as_i64() {
@@ -153,26 +158,33 @@ pub fn run_plugin(plugin_name: &str, args: Vec<String>) -> LpmResult<()> {
                 return Err(LpmError::Package(error_msg));
             }
         };
-        
+
         if !status.success() {
             let exit_code = status.code().unwrap_or(1);
-            let mut error_msg = format!(
-                "Plugin '{}' exited with code {}",
-                plugin_name,
-                exit_code
-            );
+            let mut error_msg = format!("Plugin '{}' exited with code {}", plugin_name, exit_code);
 
             // Add suggestions based on exit code
             match exit_code {
                 1 => {
                     error_msg.push_str("\n\n  This usually indicates a plugin error. Check:");
-                    error_msg.push_str(&format!("\n    - Run 'lpm {} --help' for usage", plugin_name));
+                    error_msg.push_str(&format!(
+                        "\n    - Run 'lpm {} --help' for usage",
+                        plugin_name
+                    ));
                     error_msg.push_str("\n    - Check plugin documentation");
-                    error_msg.push_str(&format!("\n    - Verify plugin is up to date: lpm install -g lpm-{}", plugin_name));
+                    error_msg.push_str(&format!(
+                        "\n    - Verify plugin is up to date: lpm install -g lpm-{}",
+                        plugin_name
+                    ));
                 }
                 2 => {
-                    error_msg.push_str("\n\n  This usually indicates invalid arguments or configuration.");
-                    error_msg.push_str(&format!("\n    - Run 'lpm {} --help' to see valid options", plugin_name));
+                    error_msg.push_str(
+                        "\n\n  This usually indicates invalid arguments or configuration.",
+                    );
+                    error_msg.push_str(&format!(
+                        "\n    - Run 'lpm {} --help' to see valid options",
+                        plugin_name
+                    ));
                 }
                 126 => {
                     error_msg.push_str("\n\n  Plugin is not executable.");
@@ -180,12 +192,18 @@ pub fn run_plugin(plugin_name: &str, args: Vec<String>) -> LpmResult<()> {
                 }
                 127 => {
                     error_msg.push_str("\n\n  Plugin or its dependencies not found.");
-                    error_msg.push_str(&format!("\n    Fix: Reinstall: lpm install -g lpm-{}", plugin_name));
+                    error_msg.push_str(&format!(
+                        "\n    Fix: Reinstall: lpm install -g lpm-{}",
+                        plugin_name
+                    ));
                 }
                 _ => {
                     error_msg.push_str("\n\n  Check plugin documentation or try:");
                     error_msg.push_str(&format!("\n    - lpm {} --help", plugin_name));
-                    error_msg.push_str(&format!("\n    - Reinstall: lpm install -g lpm-{}", plugin_name));
+                    error_msg.push_str(&format!(
+                        "\n    - Reinstall: lpm install -g lpm-{}",
+                        plugin_name
+                    ));
                 }
             }
 
@@ -194,16 +212,13 @@ pub fn run_plugin(plugin_name: &str, args: Vec<String>) -> LpmResult<()> {
         Ok(())
     } else {
         // Provide helpful error message with suggestions
-        let mut error_msg = format!(
-            "Plugin '{}' not found.\n\n",
-            plugin_name
-        );
-        
+        let mut error_msg = format!("Plugin '{}' not found.\n\n", plugin_name);
+
         error_msg.push_str(&format!(
             "  Install it with: lpm install -g lpm-{}\n",
             plugin_name
         ));
-        
+
         // Check if plugin exists in expected locations
         if let Ok(lpm_home) = lpm_home() {
             let bin_dir = lpm_home.join("bin");
@@ -212,7 +227,7 @@ pub fn run_plugin(plugin_name: &str, args: Vec<String>) -> LpmResult<()> {
                 bin_dir.join(format!("lpm-{}", plugin_name)).display()
             ));
         }
-        
+
         error_msg.push_str("\n  Available plugins are installed in:");
         if let Ok(lpm_home) = lpm_home() {
             error_msg.push_str(&format!("\n    - {}/bin/", lpm_home.display()));
@@ -221,7 +236,7 @@ pub fn run_plugin(plugin_name: &str, args: Vec<String>) -> LpmResult<()> {
             error_msg.push_str(&format!("\n    - {}/.lpm/bin/ (legacy)", home));
         }
         error_msg.push_str("\n    - PATH");
-        
+
         Err(LpmError::Package(error_msg))
     }
 }

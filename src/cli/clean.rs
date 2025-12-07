@@ -1,5 +1,5 @@
-use lpm::core::{LpmError, LpmResult};
 use lpm::core::path::{find_project_root, lua_modules_dir};
+use lpm::core::{LpmError, LpmResult};
 use std::env;
 use std::fs;
 
@@ -31,26 +31,27 @@ pub fn run() -> LpmResult<()> {
 
 fn count_packages(lua_modules: &std::path::Path) -> LpmResult<usize> {
     let mut count = 0;
-    
+
     if lua_modules.exists() {
         for entry in fs::read_dir(lua_modules)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             // Skip .lpm metadata directory
-            if path.file_name()
+            if path
+                .file_name()
                 .and_then(|n| n.to_str())
                 .map(|n| n == ".lpm")
                 .unwrap_or(false)
             {
                 continue;
             }
-            
+
             if path.is_dir() {
                 count += 1;
             }
         }
     }
-    
+
     Ok(count)
 }

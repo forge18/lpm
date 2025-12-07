@@ -13,12 +13,12 @@ impl ChecksumRecorder {
     }
 
     /// Calculate checksum for a downloaded source file
-    /// 
+    ///
     /// This should be called after downloading a package source.
     /// The checksum is then recorded in the lockfile.
     pub fn calculate_for_source(&self, source_url: &str) -> LpmResult<String> {
         let source_path = self.cache.source_path(source_url);
-        
+
         if !source_path.exists() {
             return Err(LpmError::Package(format!(
                 "Source file not found: {}",
@@ -42,19 +42,15 @@ impl ChecksumRecorder {
     }
 
     /// Record checksum in lockfile after first install
-    /// 
+    ///
     /// This is called during installation to ensure checksums are recorded
     /// in package.lock for future verification.
-    pub fn record_checksum(
-        &self,
-        package_name: &str,
-        source_url: &str,
-    ) -> LpmResult<String> {
+    pub fn record_checksum(&self, package_name: &str, source_url: &str) -> LpmResult<String> {
         let checksum = self.calculate_for_source(source_url)?;
-        
+
         // Log for debugging
         eprintln!("📦 Calculated checksum for {}: {}", package_name, checksum);
-        
+
         Ok(checksum)
     }
 }
@@ -62,8 +58,8 @@ impl ChecksumRecorder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_calculate_for_file() {
@@ -78,4 +74,3 @@ mod tests {
         assert!(checksum.starts_with("sha256:"));
     }
 }
-

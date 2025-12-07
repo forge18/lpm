@@ -4,12 +4,12 @@ use crate::build::targets::Target;
 use crate::cache::Cache;
 use crate::core::path::cache_dir;
 use crate::core::{LpmError, LpmResult};
-use crate::lua_version::detector::{LuaVersionDetector, LuaVersion};
+use crate::lua_version::detector::{LuaVersion, LuaVersionDetector};
 use crate::package::manifest::{BuildConfig, PackageManifest};
 use std::path::{Path, PathBuf};
 
 /// Builder for Rust code compiled into Lua native modules
-/// 
+///
 /// This builds Rust code as dynamic libraries (.so/.dylib/.dll) that can be
 /// loaded by Lua as native modules. These are NOT standalone Rust libraries,
 /// but compiled code that becomes part of a Lua module package.
@@ -43,7 +43,7 @@ impl RustBuilder {
     }
 
     /// Build for a specific target
-    /// 
+    ///
     /// This will:
     /// 1. Check for pre-built binaries (local cache or download)
     /// 2. Check for locally cached builds
@@ -51,25 +51,22 @@ impl RustBuilder {
     pub async fn build(&self, target: Option<&Target>) -> LpmResult<PathBuf> {
         let default_target = Target::default_target();
         let target = target.unwrap_or(&default_target);
-        
+
         // Detect Lua version for caching
         let lua_version = Self::detect_lua_version()?;
         let lua_version_str = lua_version.major_minor();
-        
+
         let manifest = PackageManifest::load(&self.project_root)?;
-        
+
         // First, check for pre-built binaries
         let prebuilt_manager = PrebuiltBinaryManager::new()?;
-        if let Some(prebuilt_path) = prebuilt_manager.get_prebuilt(
-            &manifest.name,
-            &manifest.version,
-            &lua_version,
-            target,
-        ) {
+        if let Some(prebuilt_path) =
+            prebuilt_manager.get_prebuilt(&manifest.name, &manifest.version, &lua_version, target)
+        {
             eprintln!("Using pre-built binary for Lua {}", lua_version_str);
             return Ok(prebuilt_path);
         }
-        
+
         // Check local cache
         let cache = Cache::new(cache_dir()?)?;
         if let Some(cached_path) = cache.get_rust_build(
@@ -81,24 +78,22 @@ impl RustBuilder {
             eprintln!("Using cached build for Lua {}", lua_version_str);
             return Ok(cached_path);
         }
-        
+
         // Check if package.yaml specifies pre-built binary URLs
         let binary_url: Option<String> = {
             // First check package.yaml
             let manifest = PackageManifest::load(&self.project_root).ok();
-            let url_from_manifest = manifest
-                .as_ref()
-                .and_then(|m| {
-                    // Build target key: "5.4-x86_64-unknown-linux-gnu"
-                    let target_key = format!("{}-{}", lua_version_str, target.triple);
-                    m.binary_urls.get(&target_key).cloned()
-                });
-            
+            let url_from_manifest = manifest.as_ref().and_then(|m| {
+                // Build target key: "5.4-x86_64-unknown-linux-gnu"
+                let target_key = format!("{}-{}", lua_version_str, target.triple);
+                m.binary_urls.get(&target_key).cloned()
+            });
+
             // Fall back to rockspec binary_urls if available
             // (This would need to be passed in, but for now we check manifest first)
             url_from_manifest
         };
-        
+
         // Try to download pre-built binary if URL is available
         if let Some(url) = binary_url {
             if let Some(downloaded) = prebuilt_manager
@@ -111,11 +106,14 @@ impl RustBuilder {
                 )
                 .await?
             {
-                eprintln!("Using downloaded pre-built binary for Lua {}", lua_version_str);
+                eprintln!(
+                    "Using downloaded pre-built binary for Lua {}",
+                    lua_version_str
+                );
                 return Ok(downloaded);
             }
         }
-        
+
         // Ensure cargo-zigbuild is installed
         BuildSandbox::ensure_cargo_zigbuild()?;
 
@@ -132,7 +130,7 @@ impl RustBuilder {
 
         // Find the built library
         let artifact_path = self.find_built_library(target)?;
-        
+
         // Cache the build artifact
         let cached_path = cache.store_rust_build(
             &manifest.name,
@@ -141,7 +139,7 @@ impl RustBuilder {
             &target.triple,
             &artifact_path,
         )?;
-        
+
         Ok(cached_path)
     }
 
@@ -164,11 +162,18 @@ impl RustBuilder {
         // Detect Lua version and add mlua feature
         let lua_version = Self::detect_lua_version()?;
         let mlua_feature = lua_version.mlua_feature();
-        eprintln!("Building for Lua {} (mlua feature: {})", lua_version, mlua_feature);
+        eprintln!(
+            "Building for Lua {} (mlua feature: {})",
+            lua_version, mlua_feature
+        );
 
         // Build with cargo-zigbuild
         let target_triple = target.triple.clone();
-        let mut args: Vec<String> = vec!["zigbuild".to_string(), "--target".to_string(), target_triple];
+        let mut args: Vec<String> = vec![
+            "zigbuild".to_string(),
+            "--target".to_string(),
+            target_triple,
+        ];
 
         // Add profile
         if let Some(profile) = &self.build_config.profile {
@@ -218,7 +223,10 @@ impl RustBuilder {
         // Detect Lua version and add mlua feature
         let lua_version = Self::detect_lua_version()?;
         let mlua_feature = lua_version.mlua_feature();
-        eprintln!("Building for Lua {} (mlua feature: {})", lua_version, mlua_feature);
+        eprintln!(
+            "Building for Lua {} (mlua feature: {})",
+            lua_version, mlua_feature
+        );
 
         // Build with cargo
         let mut args: Vec<String> = vec!["build".to_string()];
@@ -288,7 +296,7 @@ impl RustBuilder {
     }
 
     /// Build for all supported targets
-    /// 
+    ///
     /// This is now handled in the CLI layer since build() is async.
     /// Kept for backwards compatibility but delegates to async version.
     pub async fn build_all_targets(&self) -> LpmResult<Vec<(Target, PathBuf)>> {
@@ -297,7 +305,7 @@ impl RustBuilder {
         for target_triple in crate::build::targets::SUPPORTED_TARGETS {
             let target = Target::new(target_triple)?;
             eprintln!("Building for target: {}", target.triple);
-            
+
             match self.build(Some(&target)).await {
                 Ok(path) => {
                     results.push((target, path));
@@ -320,7 +328,7 @@ impl RustBuilder {
     }
 
     /// Detect the target Lua version for building
-    /// 
+    ///
     /// This detects the installed Lua version and ensures mlua is built
     /// with the correct feature flags (lua51, lua53, or lua54)
     pub fn detect_lua_version() -> LpmResult<LuaVersion> {

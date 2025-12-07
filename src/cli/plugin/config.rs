@@ -16,7 +16,7 @@ impl PluginConfig {
     /// Load plugin configuration
     pub fn load(plugin_name: &str) -> LpmResult<Self> {
         let config_path = Self::config_path(plugin_name)?;
-        
+
         if !config_path.exists() {
             // Return default config
             return Ok(PluginConfig {
@@ -35,7 +35,7 @@ impl PluginConfig {
     /// Save plugin configuration
     pub fn save(&self) -> LpmResult<()> {
         let config_path = Self::config_path(&self.plugin_name)?;
-        
+
         if let Some(parent) = config_path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -50,7 +50,9 @@ impl PluginConfig {
     /// Get configuration path for a plugin
     pub fn config_path(plugin_name: &str) -> LpmResult<PathBuf> {
         let lpm_home = lpm_core::core::path::lpm_home()?;
-        Ok(lpm_home.join("plugins").join(format!("{}.config.yaml", plugin_name)))
+        Ok(lpm_home
+            .join("plugins")
+            .join(format!("{}.config.yaml", plugin_name)))
     }
 
     /// Get a setting value
@@ -58,9 +60,9 @@ impl PluginConfig {
     where
         T: for<'de> Deserialize<'de>,
     {
-        self.settings.get(key).and_then(|v| {
-            serde_yaml::from_value(v.clone()).ok()
-        })
+        self.settings
+            .get(key)
+            .and_then(|v| serde_yaml::from_value(v.clone()).ok())
     }
 
     /// Set a setting value
@@ -74,4 +76,3 @@ impl PluginConfig {
         Ok(())
     }
 }
-

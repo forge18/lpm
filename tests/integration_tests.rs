@@ -25,25 +25,32 @@ fn test_init_creates_package_yaml() {
         .unwrap();
 
     assert!(output.status.success(), "lpm init --yes should succeed");
-    
+
     let package_yaml = project_root.join("package.yaml");
     assert!(package_yaml.exists(), "package.yaml should be created");
-    
+
     let content = fs::read_to_string(&package_yaml).unwrap();
-    assert!(content.contains("name:"), "package.yaml should contain name");
-    assert!(content.contains("version:"), "package.yaml should contain version");
+    assert!(
+        content.contains("name:"),
+        "package.yaml should contain name"
+    );
+    assert!(
+        content.contains("version:"),
+        "package.yaml should contain version"
+    );
 }
 
 #[test]
 fn test_init_with_existing_package_yaml() {
     let temp = TempDir::new().unwrap();
     let project_root = temp.path();
-    
+
     // Create existing package.yaml
     fs::write(
         project_root.join("package.yaml"),
         "name: existing\nversion: 1.0.0\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     let output = lpm_command()
         .arg("init")
@@ -53,9 +60,11 @@ fn test_init_with_existing_package_yaml() {
 
     // Should fail or warn about existing file
     // The exact behavior depends on implementation
-    assert!(!output.status.success() || 
-            String::from_utf8_lossy(&output.stderr).contains("exists") ||
-            String::from_utf8_lossy(&output.stderr).contains("already"));
+    assert!(
+        !output.status.success()
+            || String::from_utf8_lossy(&output.stderr).contains("exists")
+            || String::from_utf8_lossy(&output.stderr).contains("already")
+    );
 }
 
 #[test]
@@ -71,18 +80,33 @@ fn test_init_non_interactive_mode() {
         .unwrap();
 
     assert!(output.status.success(), "lpm init --yes should succeed");
-    
+
     let package_yaml = project_root.join("package.yaml");
     assert!(package_yaml.exists(), "package.yaml should be created");
-    
+
     let content = fs::read_to_string(&package_yaml).unwrap();
-    assert!(content.contains("name:"), "package.yaml should contain name");
-    assert!(content.contains("version:"), "package.yaml should contain version");
-    
+    assert!(
+        content.contains("name:"),
+        "package.yaml should contain name"
+    );
+    assert!(
+        content.contains("version:"),
+        "package.yaml should contain version"
+    );
+
     // Verify directory structure is created
-    assert!(project_root.join("src").exists(), "src/ directory should be created");
-    assert!(project_root.join("lib").exists(), "lib/ directory should be created");
-    assert!(project_root.join("tests").exists(), "tests/ directory should be created");
+    assert!(
+        project_root.join("src").exists(),
+        "src/ directory should be created"
+    );
+    assert!(
+        project_root.join("lib").exists(),
+        "lib/ directory should be created"
+    );
+    assert!(
+        project_root.join("tests").exists(),
+        "tests/ directory should be created"
+    );
 }
 
 #[test]
@@ -102,14 +126,19 @@ fn test_init_with_template_flag() {
 
     // Should succeed (even if template doesn't exist, it should handle gracefully)
     // The important thing is that the command accepts the flags
-    assert!(output.status.success() || 
-            String::from_utf8_lossy(&output.stderr).contains("template") ||
-            String::from_utf8_lossy(&output.stderr).contains("not found"));
-    
+    assert!(
+        output.status.success()
+            || String::from_utf8_lossy(&output.stderr).contains("template")
+            || String::from_utf8_lossy(&output.stderr).contains("not found")
+    );
+
     let package_yaml = project_root.join("package.yaml");
     if package_yaml.exists() {
         let content = fs::read_to_string(&package_yaml).unwrap();
-        assert!(content.contains("name:"), "package.yaml should contain name");
+        assert!(
+            content.contains("name:"),
+            "package.yaml should contain name"
+        );
     }
 }
 
@@ -126,22 +155,33 @@ fn test_init_creates_basic_structure() {
         .unwrap();
 
     assert!(output.status.success());
-    
+
     // Verify package.yaml exists
     let package_yaml = project_root.join("package.yaml");
     assert!(package_yaml.exists());
-    
+
     // Verify basic directory structure
-    assert!(project_root.join("src").is_dir(), "src/ directory should be created");
-    assert!(project_root.join("lib").is_dir(), "lib/ directory should be created");
-    assert!(project_root.join("tests").is_dir(), "tests/ directory should be created");
-    
+    assert!(
+        project_root.join("src").is_dir(),
+        "src/ directory should be created"
+    );
+    assert!(
+        project_root.join("lib").is_dir(),
+        "lib/ directory should be created"
+    );
+    assert!(
+        project_root.join("tests").is_dir(),
+        "tests/ directory should be created"
+    );
+
     // Verify basic main.lua is created (in non-interactive mode without template)
     let main_lua = project_root.join("src").join("main.lua");
     if main_lua.exists() {
         let main_content = fs::read_to_string(&main_lua).unwrap();
-        assert!(main_content.contains("print") || main_content.contains("Hello"), 
-                "main.lua should contain print or Hello statement");
+        assert!(
+            main_content.contains("print") || main_content.contains("Hello"),
+            "main.lua should contain print or Hello statement"
+        );
     }
     // Note: main.lua might not be created in non-interactive mode without template
     // The important thing is that directories are created
@@ -156,7 +196,8 @@ fn test_list_with_no_dependencies() {
     fs::write(
         project_root.join("package.yaml"),
         "name: test-project\nversion: 1.0.0\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     let output = lpm_command()
         .arg("list")
@@ -167,10 +208,12 @@ fn test_list_with_no_dependencies() {
     assert!(output.status.success(), "lpm list should succeed");
     let stdout = String::from_utf8_lossy(&output.stdout);
     // Should show no dependencies
-    assert!(stdout.contains("(none)") || 
-            stdout.contains("No dependencies") ||
-            stdout.contains("0 packages") ||
-            stdout.is_empty());
+    assert!(
+        stdout.contains("(none)")
+            || stdout.contains("No dependencies")
+            || stdout.contains("0 packages")
+            || stdout.is_empty()
+    );
 }
 
 #[test]
@@ -181,7 +224,8 @@ fn test_verify_with_no_lockfile() {
     fs::write(
         project_root.join("package.yaml"),
         "name: test-project\nversion: 1.0.0\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     let output = lpm_command()
         .arg("verify")
@@ -206,7 +250,8 @@ fn test_clean_removes_lua_modules() {
     fs::write(
         project_root.join("package.yaml"),
         "name: test-project\nversion: 1.0.0\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     let output = lpm_command()
         .arg("clean")
@@ -226,7 +271,8 @@ fn test_run_script_not_found() {
     fs::write(
         project_root.join("package.yaml"),
         "name: test-project\nversion: 1.0.0\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     let output = lpm_command()
         .arg("run")
@@ -235,7 +281,10 @@ fn test_run_script_not_found() {
         .output()
         .unwrap();
 
-    assert!(!output.status.success(), "Should fail for nonexistent script");
+    assert!(
+        !output.status.success(),
+        "Should fail for nonexistent script"
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("not found") || stderr.contains("Script"));
 }
@@ -248,7 +297,8 @@ fn test_remove_nonexistent_package() {
     fs::write(
         project_root.join("package.yaml"),
         "name: test-project\nversion: 1.0.0\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     let output = lpm_command()
         .arg("remove")
@@ -258,9 +308,11 @@ fn test_remove_nonexistent_package() {
         .unwrap();
 
     // Should fail or warn about missing package
-    assert!(!output.status.success() || 
-            String::from_utf8_lossy(&output.stderr).contains("not found") ||
-            String::from_utf8_lossy(&output.stderr).contains("not in"));
+    assert!(
+        !output.status.success()
+            || String::from_utf8_lossy(&output.stderr).contains("not found")
+            || String::from_utf8_lossy(&output.stderr).contains("not in")
+    );
 }
 
 #[test]
@@ -271,7 +323,8 @@ fn test_outdated_with_no_dependencies() {
     fs::write(
         project_root.join("package.yaml"),
         "name: test-project\nversion: 1.0.0\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     let output = lpm_command()
         .arg("outdated")
@@ -291,7 +344,8 @@ fn test_audit_with_no_dependencies() {
     fs::write(
         project_root.join("package.yaml"),
         "name: test-project\nversion: 1.0.0\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     let output = lpm_command()
         .arg("audit")
@@ -311,7 +365,8 @@ fn test_plugin_not_found_error() {
     fs::write(
         project_root.join("package.yaml"),
         "name: test-project\nversion: 1.0.0\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     let output = lpm_command()
         .arg("nonexistent-plugin")
@@ -322,10 +377,14 @@ fn test_plugin_not_found_error() {
     // Should fail with helpful error message
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("not found") || stderr.contains("Plugin"), 
-            "Error message should mention plugin not found");
-    assert!(stderr.contains("install") || stderr.contains("lpm install"), 
-            "Error message should suggest installation");
+    assert!(
+        stderr.contains("not found") || stderr.contains("Plugin"),
+        "Error message should mention plugin not found"
+    );
+    assert!(
+        stderr.contains("install") || stderr.contains("lpm install"),
+        "Error message should suggest installation"
+    );
 }
 
 #[test]
@@ -336,7 +395,8 @@ fn test_plugin_error_message_format() {
     fs::write(
         project_root.join("package.yaml"),
         "name: test-project\nversion: 1.0.0\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     // Test that plugin errors provide helpful messages
     let output = lpm_command()
@@ -347,14 +407,15 @@ fn test_plugin_error_message_format() {
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    
+
     // Error should be informative
     assert!(!stderr.is_empty(), "Error message should not be empty");
-    
+
     // Should mention the plugin name
-    assert!(stderr.contains("invalid-plugin-name-12345") || 
-            stderr.contains("Plugin"), 
-            "Error should mention plugin name or 'Plugin'");
+    assert!(
+        stderr.contains("invalid-plugin-name-12345") || stderr.contains("Plugin"),
+        "Error should mention plugin name or 'Plugin'"
+    );
 }
 
 // 5.5 Testing & Documentation tests
@@ -377,18 +438,25 @@ fn test_init_with_template_non_interactive() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let combined = format!("{} {}", stdout, stderr);
-    
+
     // Should succeed (even if template doesn't exist, it should handle gracefully)
-    assert!(output.status.success() || 
-            combined.contains("template") ||
-            combined.contains("not found") ||
-            combined.contains("Template"),
-            "Output: stdout={}, stderr={}", stdout, stderr);
-    
+    assert!(
+        output.status.success()
+            || combined.contains("template")
+            || combined.contains("not found")
+            || combined.contains("Template"),
+        "Output: stdout={}, stderr={}",
+        stdout,
+        stderr
+    );
+
     let package_yaml = project_root.join("package.yaml");
     if package_yaml.exists() {
         let content = fs::read_to_string(&package_yaml).unwrap();
-        assert!(content.contains("name:"), "package.yaml should contain name");
+        assert!(
+            content.contains("name:"),
+            "package.yaml should contain name"
+        );
     }
 }
 
@@ -400,7 +468,8 @@ fn test_template_list_command() {
     fs::write(
         project_root.join("package.yaml"),
         "name: test-project\nversion: 1.0.0\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     let output = lpm_command()
         .arg("template")
@@ -413,8 +482,10 @@ fn test_template_list_command() {
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     // Should show template list or indicate no templates
-    assert!(!stdout.contains("error") && !stdout.contains("Error"), 
-            "Should not show errors");
+    assert!(
+        !stdout.contains("error") && !stdout.contains("Error"),
+        "Should not show errors"
+    );
 }
 
 #[test]
@@ -429,18 +500,23 @@ fn test_init_non_interactive_creates_structure() {
         .output()
         .unwrap();
 
-    assert!(output.status.success(), 
-            "lpm init --yes should succeed. stderr: {}", 
-            String::from_utf8_lossy(&output.stderr));
-    
+    assert!(
+        output.status.success(),
+        "lpm init --yes should succeed. stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
     // Verify package.yaml exists
     let package_yaml = project_root.join("package.yaml");
     assert!(package_yaml.exists(), "package.yaml should be created");
-    
+
     // Verify directory structure (may not exist if template was used)
     // Just verify package.yaml was created
     let content = fs::read_to_string(&package_yaml).unwrap();
-    assert!(content.contains("name:"), "package.yaml should contain name");
+    assert!(
+        content.contains("name:"),
+        "package.yaml should contain name"
+    );
 }
 
 #[test]
@@ -457,7 +533,7 @@ fn test_init_with_all_flags() {
         .unwrap();
 
     assert!(output1.status.success());
-    
+
     // Clean up and test with --template
     fs::remove_file(project_root.join("package.yaml")).ok();
     fs::remove_dir_all(project_root.join("src")).ok();
@@ -486,7 +562,8 @@ fn test_install_package_workflow() {
     fs::write(
         project_root.join("package.yaml"),
         "name: test-project\nversion: 1.0.0\ndependencies:\n  lua-resty-http: ~> 0.17",
-    ).unwrap();
+    )
+    .unwrap();
 
     // Try to install (may fail if network unavailable, but should handle gracefully)
     let output = lpm_command()
@@ -508,7 +585,8 @@ fn test_update_package_workflow() {
     fs::write(
         project_root.join("package.yaml"),
         "name: test-project\nversion: 1.0.0\ndependencies:\n  lua-resty-http: ~> 0.17",
-    ).unwrap();
+    )
+    .unwrap();
 
     // Try to update (may fail if network unavailable, but should handle gracefully)
     let output = lpm_command()
@@ -530,7 +608,8 @@ fn test_remove_package_workflow() {
     fs::write(
         project_root.join("package.yaml"),
         "name: test-project\nversion: 1.0.0\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     // Try to remove a package (should handle gracefully if not installed)
     let output = lpm_command()
@@ -541,9 +620,11 @@ fn test_remove_package_workflow() {
         .unwrap();
 
     // Should fail or warn about missing package
-    assert!(!output.status.success() || 
-            String::from_utf8_lossy(&output.stderr).contains("not found") ||
-            String::from_utf8_lossy(&output.stderr).contains("not in"));
+    assert!(
+        !output.status.success()
+            || String::from_utf8_lossy(&output.stderr).contains("not found")
+            || String::from_utf8_lossy(&output.stderr).contains("not in")
+    );
 }
 
 #[test]
@@ -555,13 +636,15 @@ fn test_verify_with_lockfile() {
     fs::write(
         project_root.join("package.yaml"),
         "name: test-project\nversion: 1.0.0\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     // Create a minimal lockfile
     fs::write(
         project_root.join("package.lock"),
         "version: 1\ngenerated_at: 2024-01-01T00:00:00Z\npackages: {}\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     let output = lpm_command()
         .arg("verify")
@@ -582,7 +665,8 @@ fn test_list_with_dependencies() {
     fs::write(
         project_root.join("package.yaml"),
         "name: test-project\nversion: 1.0.0\ndependencies:\n  lua-resty-http: ~> 0.17",
-    ).unwrap();
+    )
+    .unwrap();
 
     let output = lpm_command()
         .arg("list")
@@ -602,7 +686,8 @@ fn test_build_command() {
     fs::write(
         project_root.join("package.yaml"),
         "name: test-project\nversion: 1.0.0\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     let output = lpm_command()
         .arg("build")
@@ -623,7 +708,8 @@ fn test_package_command() {
     fs::write(
         project_root.join("package.yaml"),
         "name: test-project\nversion: 1.0.0\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     let output = lpm_command()
         .arg("package")
@@ -634,4 +720,3 @@ fn test_package_command() {
     // Should handle package command
     assert!(output.status.code().is_some());
 }
-

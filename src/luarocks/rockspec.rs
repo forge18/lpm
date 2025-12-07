@@ -61,7 +61,7 @@ impl InstallTable {
 
 impl Rockspec {
     /// Parse rockspec from Lua content using regex-based parsing
-    /// 
+    ///
     /// Rockspecs are simple data files, so we can parse them without
     /// embedding a Lua interpreter. This simplifies cross-compilation
     /// and removes the need for Lua version selection.
@@ -112,7 +112,10 @@ impl Rockspec {
             description: self.description.clone(),
             homepage: self.homepage.clone(),
             license: self.license.clone(),
-            lua_version: self.lua_version.clone().unwrap_or_else(|| ">=5.1".to_string()),
+            lua_version: self
+                .lua_version
+                .clone()
+                .unwrap_or_else(|| ">=5.1".to_string()),
             dependencies,
             dev_dependencies: HashMap::new(),
             scripts: HashMap::new(),
@@ -121,4 +124,3 @@ impl Rockspec {
         }
     }
 }
-

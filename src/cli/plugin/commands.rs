@@ -1,7 +1,7 @@
-use crate::cli::plugin::{list_plugins, PluginInfo};
+use crate::cli::plugin::config::PluginConfig;
 use crate::cli::plugin::installer::PluginInstaller;
 use crate::cli::plugin::registry::PluginRegistry;
-use crate::cli::plugin::config::PluginConfig;
+use crate::cli::plugin::{list_plugins, PluginInfo};
 use clap::{Parser, Subcommand};
 use lpm_core::{LpmError, LpmResult};
 use tokio::runtime::Runtime;
@@ -89,7 +89,10 @@ fn run_config_command(command: ConfigSubcommand) -> LpmResult<()> {
             } else if let Some(value) = config.get::<bool>(&key) {
                 println!("{}", value);
             } else {
-                println!("Key '{}' not found in plugin '{}' configuration", key, plugin);
+                println!(
+                    "Key '{}' not found in plugin '{}' configuration",
+                    key, plugin
+                );
             }
             Ok(())
         }
@@ -149,8 +152,14 @@ fn list_installed_plugins() -> LpmResult<()> {
 fn show_plugin_info(name: &str) -> LpmResult<()> {
     if let Some(plugin) = PluginInfo::from_installed(name)? {
         println!("Plugin: {}", plugin.metadata.name);
-        println!("Version: {}", plugin.installed_version.as_ref().unwrap_or(&plugin.metadata.version));
-        
+        println!(
+            "Version: {}",
+            plugin
+                .installed_version
+                .as_ref()
+                .unwrap_or(&plugin.metadata.version)
+        );
+
         if let Some(desc) = &plugin.metadata.description {
             println!("Description: {}", desc);
         }
@@ -160,9 +169,9 @@ fn show_plugin_info(name: &str) -> LpmResult<()> {
         if let Some(homepage) = &plugin.metadata.homepage {
             println!("Homepage: {}", homepage);
         }
-        
+
         println!("Executable: {}", plugin.executable_path.display());
-        
+
         if !plugin.metadata.dependencies.is_empty() {
             println!("\nDependencies:");
             for dep in &plugin.metadata.dependencies {
@@ -184,8 +193,9 @@ fn show_plugin_info(name: &str) -> LpmResult<()> {
 }
 
 fn update_plugins(names: Option<Vec<String>>) -> LpmResult<()> {
-    let rt = Runtime::new().map_err(|e| LpmError::Package(format!("Failed to create runtime: {}", e)))?;
-    
+    let rt = Runtime::new()
+        .map_err(|e| LpmError::Package(format!("Failed to create runtime: {}", e)))?;
+
     if let Some(plugin_names) = names {
         // Update specific plugins
         for name in plugin_names {
@@ -214,37 +224,50 @@ fn update_plugins(names: Option<Vec<String>>) -> LpmResult<()> {
 
 fn check_outdated_plugins() -> LpmResult<()> {
     let plugins = list_plugins()?;
-    
+
     if plugins.is_empty() {
         println!("No plugins installed.");
         return Ok(());
     }
 
     println!("Checking for outdated plugins...\n");
-    
-    let rt = Runtime::new().map_err(|e| LpmError::Package(format!("Failed to create runtime: {}", e)))?;
+
+    let rt = Runtime::new()
+        .map_err(|e| LpmError::Package(format!("Failed to create runtime: {}", e)))?;
     let mut outdated_count = 0;
-    
+
     for plugin in plugins {
-        let current_version = plugin.installed_version
+        let current_version = plugin
+            .installed_version
             .as_ref()
             .unwrap_or(&plugin.metadata.version);
-        
+
         match rt.block_on(PluginRegistry::get_latest_version(&plugin.metadata.name)) {
             Ok(Some(latest_version)) => {
                 if current_version != &latest_version {
-                    println!("  {}: {} -> {} (update available)", 
-                             plugin.metadata.name, current_version, latest_version);
+                    println!(
+                        "  {}: {} -> {} (update available)",
+                        plugin.metadata.name, current_version, latest_version
+                    );
                     outdated_count += 1;
                 } else {
-                    println!("  {}: {} (up to date)", plugin.metadata.name, current_version);
+                    println!(
+                        "  {}: {} (up to date)",
+                        plugin.metadata.name, current_version
+                    );
                 }
             }
             Ok(None) => {
-                println!("  {}: {} (latest version unknown)", plugin.metadata.name, current_version);
+                println!(
+                    "  {}: {} (latest version unknown)",
+                    plugin.metadata.name, current_version
+                );
             }
             Err(e) => {
-                println!("  {}: {} (error checking: {})", plugin.metadata.name, current_version, e);
+                println!(
+                    "  {}: {} (error checking: {})",
+                    plugin.metadata.name, current_version, e
+                );
             }
         }
     }
@@ -252,7 +275,10 @@ fn check_outdated_plugins() -> LpmResult<()> {
     if outdated_count == 0 {
         println!("\nAll plugins are up to date.");
     } else {
-        println!("\n{} plugin(s) have updates available. Run 'lpm plugin update' to update them.", outdated_count);
+        println!(
+            "\n{} plugin(s) have updates available. Run 'lpm plugin update' to update them.",
+            outdated_count
+        );
     }
 
     Ok(())
@@ -261,9 +287,10 @@ fn check_outdated_plugins() -> LpmResult<()> {
 fn search_plugins(query: Option<String>) -> LpmResult<()> {
     let search_query = query.as_deref().unwrap_or("lpm");
     println!("Searching for plugins matching '{}'...\n", search_query);
-    
-    let rt = Runtime::new().map_err(|e| LpmError::Package(format!("Failed to create runtime: {}", e)))?;
-    
+
+    let rt = Runtime::new()
+        .map_err(|e| LpmError::Package(format!("Failed to create runtime: {}", e)))?;
+
     match rt.block_on(PluginRegistry::search(search_query)) {
         Ok(results) => {
             if results.is_empty() {
@@ -288,7 +315,6 @@ fn search_plugins(query: Option<String>) -> LpmResult<()> {
             return Err(LpmError::Package(format!("Search failed: {}", e)));
         }
     }
-    
+
     Ok(())
 }
-

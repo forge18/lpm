@@ -3,7 +3,7 @@ use crate::security::vulnerability::{Severity, Vulnerability};
 use std::collections::HashMap;
 
 /// Database of security advisories
-/// 
+///
 /// This can be extended to load from external sources (API, file, etc.)
 pub struct AdvisoryDatabase {
     advisories: HashMap<String, Vec<Vulnerability>>,
@@ -20,27 +20,27 @@ impl AdvisoryDatabase {
     /// Load advisories from a source (currently uses built-in data)
     pub fn load() -> LpmResult<Self> {
         let mut db = Self::new();
-        
+
         // Load built-in advisories
         db.load_builtin_advisories();
-        
+
         // Future enhancement: Load from external sources (API, file, etc.)
         // This would enable automatic updates and integration with vulnerability databases
         // db.load_from_file("~/.lpm/advisories.json")?;
         // db.load_from_api("https://advisories.luarocks.org/api/v1/advisories")?;
-        
+
         Ok(db)
     }
 
     /// Load built-in security advisories.
-    /// 
+    ///
     /// This is a placeholder for known vulnerabilities.
     /// In production, this would be loaded from an external database.
     fn load_builtin_advisories(&mut self) {
         // Placeholder for adding known vulnerabilities.
         // In production, advisories would be loaded from external sources
         // such as OSV (Open Source Vulnerabilities) or a LuaRocks-specific database.
-        
+
         // Example vulnerability structure (not a real vulnerability):
         // self.add_advisory(Vulnerability {
         //     package: "example-package".to_string(),
@@ -65,7 +65,7 @@ impl AdvisoryDatabase {
     /// Check a package version for vulnerabilities
     pub fn check_package(&self, package: &str, version: &str) -> Vec<&Vulnerability> {
         let mut found = Vec::new();
-        
+
         if let Some(advisories) = self.advisories.get(package) {
             for vuln in advisories {
                 if vuln.affects_version(version) {
@@ -73,7 +73,7 @@ impl AdvisoryDatabase {
                 }
             }
         }
-        
+
         found
     }
 
@@ -91,15 +91,15 @@ impl AdvisoryDatabase {
     }
 
     /// Load advisories from OSV (Open Source Vulnerabilities) database
-    /// 
+    ///
     /// OSV is Google's vulnerability database with a public API.
     /// API: https://osv.dev/api/v1/query
-    /// 
+    ///
     /// This queries OSV for Lua package vulnerabilities.
     /// Note: OSV uses "LuaRocks" as the ecosystem identifier.
     pub async fn load_from_osv(&mut self, package_name: &str) -> LpmResult<()> {
         use reqwest;
-        
+
         let client = reqwest::Client::new();
         let query = serde_json::json!({
             "version": "0",
@@ -136,11 +136,21 @@ impl AdvisoryDatabase {
     }
 
     /// Parse an OSV vulnerability entry
-    fn parse_osv_vulnerability(&self, vuln: &serde_json::Value, package_name: &str) -> Option<Vulnerability> {
+    fn parse_osv_vulnerability(
+        &self,
+        vuln: &serde_json::Value,
+        package_name: &str,
+    ) -> Option<Vulnerability> {
         let id = vuln.get("id")?.as_str()?;
-        let summary = vuln.get("summary").and_then(|s| s.as_str()).unwrap_or("Unknown vulnerability");
-        let details = vuln.get("details").and_then(|d| d.as_str()).unwrap_or(summary);
-        
+        let summary = vuln
+            .get("summary")
+            .and_then(|s| s.as_str())
+            .unwrap_or("Unknown vulnerability");
+        let details = vuln
+            .get("details")
+            .and_then(|d| d.as_str())
+            .unwrap_or(summary);
+
         // Parse severity from database_specific or use default
         let severity = vuln
             .get("database_specific")
@@ -215,7 +225,10 @@ impl AdvisoryDatabase {
     pub async fn load_from_osv_batch(&mut self, packages: &[String]) -> LpmResult<()> {
         for package in packages {
             if let Err(e) = self.load_from_osv(package).await {
-                eprintln!("Warning: Failed to load OSV advisories for {}: {}", package, e);
+                eprintln!(
+                    "Warning: Failed to load OSV advisories for {}: {}",
+                    package, e
+                );
             }
         }
         Ok(())
@@ -235,7 +248,7 @@ mod tests {
     #[test]
     fn test_advisory_database() {
         let mut db = AdvisoryDatabase::new();
-        
+
         let vuln = Vulnerability {
             package: "test-package".to_string(),
             affected_versions: "<2.0.0".to_string(),
@@ -246,14 +259,13 @@ mod tests {
             fixed_in: Some("2.0.0".to_string()),
             references: Vec::new(),
         };
-        
+
         db.add_advisory(vuln);
-        
+
         let found = db.check_package("test-package", "1.0.0");
         assert_eq!(found.len(), 1);
-        
+
         let found = db.check_package("test-package", "2.0.0");
         assert_eq!(found.len(), 0);
     }
 }
-

@@ -1,5 +1,5 @@
-use lpm::core::{LpmError, LpmResult};
 use lpm::core::path::{find_project_root, lua_modules_dir};
+use lpm::core::{LpmError, LpmResult};
 use lpm::package::lockfile::Lockfile;
 use lpm::package::manifest::PackageManifest;
 use std::env;
@@ -37,16 +37,16 @@ fn list_global() -> LpmResult<()> {
     use lpm::core::path::{global_lua_modules_dir, global_packages_metadata_dir};
     use serde::Deserialize;
     use std::fs;
-    
+
     let global_lua_modules = global_lua_modules_dir()?;
-    
+
     if !global_lua_modules.exists() {
         println!("No globally installed packages.");
         return Ok(());
     }
 
     let mut packages = Vec::new();
-    
+
     if let Ok(entries) = fs::read_dir(&global_lua_modules) {
         for entry in entries.flatten() {
             let path = entry.path();
@@ -67,10 +67,10 @@ fn list_global() -> LpmResult<()> {
     }
 
     packages.sort();
-    
+
     // Load metadata to show executables
     let metadata_dir = global_packages_metadata_dir().ok();
-    
+
     println!("Globally installed packages:");
     for package in packages {
         // Try to load metadata to show executables
@@ -82,7 +82,7 @@ fn list_global() -> LpmResult<()> {
                 struct GlobalPackageMetadata {
                     executables: Vec<String>,
                 }
-                
+
                 if let Ok(content) = fs::read_to_string(&metadata_file) {
                     if let Ok(metadata) = serde_yaml::from_str::<GlobalPackageMetadata>(&content) {
                         executables = metadata.executables;
@@ -90,7 +90,7 @@ fn list_global() -> LpmResult<()> {
                 }
             }
         }
-        
+
         if executables.is_empty() {
             println!("  {}", package);
         } else {
@@ -125,7 +125,10 @@ fn print_package_list(
             .map(|pkg| pkg.version.clone());
 
         if let Some(version) = resolved_version {
-            println!("  {} {}@{} (constraint: {})", status, name, version, version_constraint);
+            println!(
+                "  {} {}@{} (constraint: {})",
+                status, name, version, version_constraint
+            );
         } else {
             println!("  {} {} (constraint: {})", status, name, version_constraint);
         }
@@ -144,9 +147,15 @@ fn print_package_list(
                 .map(|pkg| pkg.version.clone());
 
             if let Some(version) = resolved_version {
-                println!("  {} {}@{} (constraint: {}, dev)", status, name, version, version_constraint);
+                println!(
+                    "  {} {}@{} (constraint: {}, dev)",
+                    status, name, version, version_constraint
+                );
             } else {
-                println!("  {} {} (constraint: {}, dev)", status, name, version_constraint);
+                println!(
+                    "  {} {} (constraint: {}, dev)",
+                    status, name, version_constraint
+                );
             }
         }
     }
@@ -166,17 +175,16 @@ fn print_dependency_tree(
         .dependencies
         .iter()
         .map(|(n, v)| (n, v, false))
-        .chain(
-            manifest
-                .dev_dependencies
-                .iter()
-                .map(|(n, v)| (n, v, true)),
-        )
+        .chain(manifest.dev_dependencies.iter().map(|(n, v)| (n, v, true)))
         .collect();
 
     for (i, (name, version_constraint, is_dev)) in all_deps.iter().enumerate() {
         let is_last_item = i == all_deps.len() - 1;
-        let connector = if is_last_item { "└──" } else { "├──" };
+        let connector = if is_last_item {
+            "└──"
+        } else {
+            "├──"
+        };
         let next_prefix = if is_last_item {
             format!("{}   ", prefix)
         } else {
@@ -212,7 +220,11 @@ fn print_dependency_tree(
                     let deps: Vec<(&String, &String)> = pkg.dependencies.iter().collect();
                     for (j, (dep_name, dep_version)) in deps.iter().enumerate() {
                         let is_last_dep = j == deps.len() - 1;
-                        let dep_connector = if is_last_dep { "└──" } else { "├──" };
+                        let dep_connector = if is_last_dep {
+                            "└──"
+                        } else {
+                            "├──"
+                        };
 
                         let dep_installed = lua_modules.join(*dep_name).exists();
                         let dep_status = if dep_installed { "✓" } else { "✗" };

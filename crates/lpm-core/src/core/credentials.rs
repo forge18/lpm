@@ -6,7 +6,7 @@ use std::path::Path;
 const KEYRING_SERVICE: &str = "lpm";
 
 /// Manages credential storage using OS keychain
-/// 
+///
 /// Platform support:
 /// - macOS: Keychain
 /// - Windows: Credential Manager  
@@ -19,8 +19,9 @@ impl CredentialStore {
         let entry = Entry::new(KEYRING_SERVICE, key)
             .map_err(|e| LpmError::Package(format!("Failed to create keyring entry: {}", e)))?;
 
-        entry.set_password(value)
-            .map_err(|e| LpmError::Package(format!("Failed to store credential in keychain: {}", e)))?;
+        entry.set_password(value).map_err(|e| {
+            LpmError::Package(format!("Failed to store credential in keychain: {}", e))
+        })?;
 
         Ok(())
     }
@@ -30,8 +31,12 @@ impl CredentialStore {
         let entry = Entry::new(KEYRING_SERVICE, key)
             .map_err(|e| LpmError::Package(format!("Failed to create keyring entry: {}", e)))?;
 
-        let password = entry.get_password()
-            .map_err(|e| LpmError::Package(format!("Failed to retrieve credential from keychain: {}", e)))?;
+        let password = entry.get_password().map_err(|e| {
+            LpmError::Package(format!(
+                "Failed to retrieve credential from keychain: {}",
+                e
+            ))
+        })?;
 
         Ok(password)
     }
@@ -41,8 +46,9 @@ impl CredentialStore {
         let entry = Entry::new(KEYRING_SERVICE, key)
             .map_err(|e| LpmError::Package(format!("Failed to create keyring entry: {}", e)))?;
 
-        entry.delete_credential()
-            .map_err(|e| LpmError::Package(format!("Failed to delete credential from keychain: {}", e)))?;
+        entry.delete_credential().map_err(|e| {
+            LpmError::Package(format!("Failed to delete credential from keychain: {}", e))
+        })?;
 
         Ok(())
     }
@@ -53,27 +59,27 @@ impl CredentialStore {
     }
 
     /// Set file permissions to 0600 (owner read/write only)
-    /// 
+    ///
     /// This is a utility function for ensuring sensitive files have proper permissions.
     /// Used for any credential-related files that might exist.
     #[cfg(unix)]
     pub fn set_secure_permissions(path: &Path) -> LpmResult<()> {
         use std::fs;
         use std::os::unix::fs::PermissionsExt;
-        
+
         let mut perms = fs::metadata(path)
             .map_err(|e| LpmError::Package(format!("Failed to get file metadata: {}", e)))?
             .permissions();
-        
+
         perms.set_mode(0o600); // rw------- (owner read/write only)
         fs::set_permissions(path, perms)
             .map_err(|e| LpmError::Package(format!("Failed to set file permissions: {}", e)))?;
-        
+
         Ok(())
     }
 
     /// Set file permissions to 0600 (owner read/write only) on Windows
-    /// 
+    ///
     /// On Windows, file permissions work differently. Since we use the OS keyring
     /// for credential storage, this is a no-op on Windows.
     #[cfg(windows)]
@@ -127,4 +133,3 @@ mod tests {
         assert!(!CredentialStore::exists(test_key));
     }
 }
-

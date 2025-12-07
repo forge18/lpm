@@ -62,7 +62,7 @@ impl PackageManifest {
 
         // Validate manifest (basic validation)
         manifest.validate()?;
-        
+
         // Note: Additional schema validation (ManifestValidator) is not available in lpm-core
         // Plugins or main lpm crate can add their own validation if needed
 
@@ -73,12 +73,16 @@ impl PackageManifest {
     pub fn validate(&self) -> LpmResult<()> {
         // Validate name
         if self.name.is_empty() {
-            return Err(LpmError::Package("Package name cannot be empty".to_string()));
+            return Err(LpmError::Package(
+                "Package name cannot be empty".to_string(),
+            ));
         }
 
         // Validate version format (basic SemVer check)
         if self.version.is_empty() {
-            return Err(LpmError::Package("Package version cannot be empty".to_string()));
+            return Err(LpmError::Package(
+                "Package version cannot be empty".to_string(),
+            ));
         }
 
         // Validate lua_version
@@ -146,7 +150,7 @@ impl PackageManifest {
     }
 
     /// Get production dependencies (excluding dev_dependencies)
-    /// 
+    ///
     /// This is useful for production builds where dev dependencies should be excluded.
     pub fn production_dependencies(&self) -> &std::collections::HashMap<String, String> {
         &self.dependencies
@@ -158,7 +162,7 @@ impl PackageManifest {
     }
 
     /// Get all dependencies (regular + dev) as a combined map
-    /// 
+    ///
     /// Note: This does not handle conflicts - a package should not be in both
     /// dependencies and dev_dependencies. Use ConflictChecker to validate.
     pub fn all_dependencies(&self) -> std::collections::HashMap<String, String> {
@@ -206,4 +210,3 @@ dependencies:
         assert!(temp.path().join("package.yaml").exists());
     }
 }
-

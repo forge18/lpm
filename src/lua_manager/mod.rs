@@ -6,4 +6,3 @@ pub mod wrappers;
 pub use downloader::LuaDownloader;
 pub use switcher::VersionSwitcher;
 pub use wrappers::WrapperGenerator;
-

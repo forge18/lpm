@@ -144,12 +144,16 @@ async fn main() -> Result<(), LpmError> {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        Commands::Init { template, yes } => {
-            cli::init::run(template, yes).await
-        },
-        Commands::Install { package, dev, path, no_dev, dev_only, global, interactive } => {
-            cli::install::run(package, dev, path, no_dev, dev_only, global, interactive).await
-        }
+        Commands::Init { template, yes } => cli::init::run(template, yes).await,
+        Commands::Install {
+            package,
+            dev,
+            path,
+            no_dev,
+            dev_only,
+            global,
+            interactive,
+        } => cli::install::run(package, dev, path, no_dev, dev_only, global, interactive).await,
         Commands::Remove { package, global } => cli::remove::run(package, global),
         Commands::Update { package } => cli::update::run(package).await,
         Commands::List { tree, global } => cli::list::run(tree, global),
@@ -158,7 +162,10 @@ async fn main() -> Result<(), LpmError> {
         Commands::Clean => cli::clean::run(),
         Commands::Run { script } => cli::run::run(script),
         Commands::Exec { command } => cli::exec::run(command),
-        Commands::Build { target, all_targets } => cli::build::run(target, all_targets),
+        Commands::Build {
+            target,
+            all_targets,
+        } => cli::build::run(target, all_targets),
         Commands::Package { target } => cli::package::run(target),
         Commands::Publish { with_binaries } => cli::publish::run(with_binaries).await,
         Commands::Login => cli::login::run().await,
@@ -167,7 +174,7 @@ async fn main() -> Result<(), LpmError> {
         Commands::SetupPath => {
             lpm::core::path_setup::setup_path_auto()?;
             Ok(())
-        },
+        }
         Commands::Lua(cmd) => cli::lua::run(cmd).await,
         Commands::Template(cmd) => cli::template::run(cmd),
         Commands::Plugin(cmd) => cli::plugin::commands::run(cmd),
@@ -176,7 +183,7 @@ async fn main() -> Result<(), LpmError> {
                 return Err(LpmError::Package("Command required".to_string()));
             }
             cli::plugin::run_plugin(&args[0], args[1..].to_vec())
-        },
+        }
     };
 
     // Display error with helpful suggestions
@@ -186,4 +193,3 @@ async fn main() -> Result<(), LpmError> {
 
     result
 }
-
