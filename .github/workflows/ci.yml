@@ -72,11 +72,11 @@ jobs:
         timeout-minutes: 15
 
       - name: Run integration tests
-        run: cargo test --test integration_tests
+        run: cargo test --all-features --test integration_tests
         timeout-minutes: 15
 
       - name: Run security tests
-        run: cargo test --test security
+        run: cargo test --all-features --test security
 
   comprehensive-tests:
     name: Comprehensive E2E Tests
@@ -128,19 +128,22 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-build-target-
       
+      - name: Build
+        run: cargo build --all-features
+      
       - name: Run fast tests
-        run: cargo test --lib
+        run: cargo test --all-features --lib
       
       - name: Run integration tests
-        run: cargo test --test integration_tests
+        run: cargo test --all-features --test integration_tests
       
       - name: Run E2E tests (fast)
-        run: cargo test --test e2e_tests
+        run: cargo test --all-features --test e2e_tests
       
       - name: Run network tests
         run: |
-          cargo test --test integration_tests -- --ignored --test-threads=1 || true
-          cargo test --test e2e_tests -- --ignored --test-threads=1 || true
+          cargo test --all-features --test integration_tests -- --ignored --test-threads=1 || true
+          cargo test --all-features --test e2e_tests -- --ignored --test-threads=1 || true
         timeout-minutes: 30
       
       - name: Upload test results
