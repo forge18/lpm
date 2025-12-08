@@ -65,10 +65,12 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Run tests
-        run: cargo test --all-features
+        run: cargo test --all-features --lib
+        timeout-minutes: 15
 
       - name: Run integration tests
         run: cargo test --test integration_tests
+        timeout-minutes: 15
 
       - name: Run security tests
         run: cargo test --test security
@@ -89,6 +91,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: microsoft/setup-msbuild@v2
       
       - name: Install Lua
         uses: leafo/gh-actions-lua@v10
@@ -169,7 +175,6 @@ jobs:
             p/owasp-top-ten
             p/r2c-security-audit
             p/rust
-          generateSarif: "1"
         continue-on-error: true
 
       - name: Upload Semgrep results to GitHub Security
@@ -177,6 +182,47 @@ jobs:
         if: always()
         with:
           sarif_file: semgrep.sarif
+        continue-on-error: true
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install tarpaulin
+        run: cargo install cargo-tarpaulin
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Generate coverage
+        run: cargo tarpaulin --out Lcov --output-dir coverage --timeout 300 --all-features
+
+      - name: Update coverage badge
+        run: bash scripts/update-coverage-badge.sh
+
+      - name: Commit coverage changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add coverage/ README.md
+          git diff --quiet && git diff --staged --quiet || git commit -m "chore: update coverage badge"
+          git push
 
   build:
     name: Build Check
