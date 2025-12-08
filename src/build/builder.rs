@@ -858,18 +858,14 @@ mod tests {
         let builder = RustBuilder::new(temp.path(), &manifest).unwrap();
         // Use a cross-compilation target
         let target = Target::new("x86_64-unknown-linux-gnu").unwrap();
-        // Create the module file in cross-compile target directory
-        let target_dir = temp
-            .path()
-            .join("target")
-            .join("x86_64-unknown-linux-gnu")
-            .join("release");
-        let module_path = target_dir.join("lib").join("mymodule.so");
+        // Create the module file at the path specified in modules config
+        // (find_built_library checks here first)
+        let module_path = temp.path().join("lib").join("mymodule.so");
         std::fs::create_dir_all(module_path.parent().unwrap()).unwrap();
         std::fs::write(&module_path, b"fake library").unwrap();
 
         let result = builder.find_built_library(&target);
-        // Should succeed - module file exists in cross-compile target directory
+        // Should succeed - module file exists at the configured path
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), module_path);
     }

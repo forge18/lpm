@@ -86,8 +86,23 @@ impl PublishPackager {
 
     /// Copy Rust-compiled native module binaries
     fn copy_rust_binaries(&self, package_dir: &Path) -> LpmResult<()> {
-        let lua_version = LuaVersionDetector::detect()?;
-        let prebuilt_manager = PrebuiltBinaryManager::new()?;
+        // Try to detect Lua version, but continue gracefully if not found
+        let lua_version = match LuaVersionDetector::detect() {
+            Ok(version) => version,
+            Err(_) => {
+                println!("  No Lua detected, skipping pre-built binary inclusion");
+                return Ok(());
+            }
+        };
+        
+        let prebuilt_manager = match PrebuiltBinaryManager::new() {
+            Ok(manager) => manager,
+            Err(_) => {
+                println!("  Could not initialize binary manager, skipping pre-built binaries");
+                return Ok(());
+            }
+        };
+        
         let default_target = Target::default_target();
 
         // Try to get pre-built binary for current platform

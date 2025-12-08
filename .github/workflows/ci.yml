@@ -92,9 +92,9 @@ jobs:
         with:
           components: rustfmt, clippy
       
-      - name: Setup MSVC (Windows)
+      - name: Install Visual Studio Build Tools (Windows)
         if: runner.os == 'Windows'
-        uses: microsoft/setup-msbuild@v2
+        uses: ilammy/msvc-dev-cmd@v1
       
       - name: Install Lua
         uses: leafo/gh-actions-lua@v10
